@@ -117,8 +117,14 @@ export async function getDriverServices(driverId: string): Promise<DriverService
     return []
   }
 
-  return data || []
-}
+  // Transformamos los datos para sacar al cliente del array
+  const formattedData = (data || []).map((service: any) => ({
+    ...service,
+    // Si clients es un array, tomamos el primero. Si no, lo dejamos igual.
+    clients: Array.isArray(service.clients) ? service.clients[0] : service.clients
+  }));
+
+  return formattedData as DriverService[];
 
 /**
  * Obtiene un servicio específico por ID con datos del cliente y conductor.
