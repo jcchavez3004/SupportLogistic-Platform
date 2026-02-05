@@ -38,7 +38,7 @@ export default async function ServiceDetailPage({ params }: ServiceDetailPagePro
 
   return (
     <ServiceDetailView
-      service={service}
+      service={service as any}
       serviceNumber={serviceNumber}
       role={role}
     />
