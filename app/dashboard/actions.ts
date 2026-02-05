@@ -125,7 +125,7 @@ export async function getDriverServices(driverId: string): Promise<DriverService
   }));
 
   return formattedData as DriverService[];
-]}
+}
 
 /**
  * Obtiene un servicio específico por ID con datos del cliente y conductor.
