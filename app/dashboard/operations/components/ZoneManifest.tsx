@@ -163,7 +163,7 @@ function ManifestDocument({ zoneLabel, services, driverName }: ManifestPDFProps)
           {services.map((service, index) => (
             <View 
               key={service.id} 
-              style={[styles.tableRow, index % 2 === 1 && styles.tableRowAlt]}
+              style={[styles.tableRow, index % 2 === 1 ? styles.tableRowAlt : {}]}
             >
               <View style={styles.colCheck}>
                 <View style={styles.checkbox} />
