@@ -28,7 +28,7 @@ export default async function ClientsPage() {
   const [clientsResult, serviceTypes, clientServiceTypes] = await Promise.all([
     supabase
       .from('clients')
-      .select('id, company_name, nit, address, logo_url, created_at')
+      .select('id, company_name, nit, address, logo_url, created_at, created_at')
       .order('created_at', { ascending: false }),
     getServiceTypes(),
     getAllClientsServiceTypes(),
@@ -57,7 +57,7 @@ export default async function ClientsPage() {
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <ClientsTable 
-          clients={clients || []} 
+          clients={(clients || []) as any} 
           serviceTypes={serviceTypes}
           clientServiceTypes={clientServiceTypes}
           canEdit={canManageClients}
