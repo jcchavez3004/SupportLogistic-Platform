@@ -61,7 +61,7 @@ export default async function ServicesPage() {
 
       {/* Contenedor de tabla/tarjetas */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <ServicesTable services={services} drivers={drivers} role={role} />
+        <ServicesTable services={services as any} drivers={drivers} role={role} />
       </div>
     </div>
   )
