@@ -7,30 +7,38 @@ import Link from 'next/link'
 import { FileDropzone, type ParsedRow } from './components/FileDropzone'
 import { DataPreview } from './components/DataPreview'
 import { ImportProgress } from './components/ImportProgress'
-import { processBulkImport, checkZoneServiceEnabled } from './actions'
+import { processBulkImport, getClientsForBulkImport } from './actions'
 
 type ImportStatus = 'idle' | 'importing' | 'success' | 'error'
 
 export default function BulkImportPage() {
   const router = useRouter()
-  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null)
   const [parsedData, setParsedData] = useState<ParsedRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [importStatus, setImportStatus] = useState<ImportStatus>('idle')
   const [importProgress, setImportProgress] = useState(0)
   const [importMessage, setImportMessage] = useState('')
+  const [resolvedClientId, setResolvedClientId] = useState<string | null>(null)
 
-  // Verificar autorización al cargar
   useEffect(() => {
-    async function checkAuth() {
+    async function resolveClientId() {
       try {
-        const { enabled } = await checkZoneServiceEnabled()
-        setIsAuthorized(enabled)
-      } catch {
-        setIsAuthorized(false)
+        const { isAdmin, profileClientId, clients } = await getClientsForBulkImport()
+
+        if (!isAdmin && profileClientId) {
+          // Cliente normal: usa su propio client_id
+          setResolvedClientId(profileClientId)
+        } else if (isAdmin && clients.length > 0) {
+          // Admin: usa el primer cliente disponible por defecto
+          // (en el futuro se puede agregar un selector)
+          setResolvedClientId(clients[0].id)
+          console.log('[BulkImport] Admin: usando cliente por defecto:', clients[0].company_name)
+        }
+      } catch (err) {
+        console.error('[BulkImport] Error resolviendo clientId:', err)
       }
     }
-    checkAuth()
+    resolveClientId()
   }, [])
 
   const handleDataParsed = useCallback((data: ParsedRow[]) => {
@@ -57,7 +65,11 @@ export default function BulkImportPage() {
         setImportProgress(prev => Math.min(prev + Math.random() * 10, 90))
       }, 200)
 
-      const result = await processBulkImport(parsedData)
+      console.log('[bulk-import] Import click:', {
+        rows: parsedData.length,
+      })
+
+      const result = await processBulkImport(parsedData, resolvedClientId ?? undefined)
 
       clearInterval(progressInterval)
 
@@ -82,43 +94,6 @@ export default function BulkImportPage() {
     setImportProgress(0)
     setImportMessage('')
   }, [])
-
-  // Loading state
-  if (isAuthorized === null) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent" />
-      </div>
-    )
-  }
-
-  // No autorizado
-  if (!isAuthorized) {
-    return (
-      <div className="max-w-2xl mx-auto">
-        <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-8 text-center">
-          <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <AlertTriangle className="h-8 w-8 text-amber-600" />
-          </div>
-          <h2 className="text-xl font-bold text-amber-900 mb-2">
-            Acceso Restringido
-          </h2>
-          <p className="text-amber-700 mb-6">
-            Esta funcionalidad solo está disponible para clientes con el 
-            <span className="font-semibold"> Servicio por Zonas </span>
-            habilitado.
-          </p>
-          <Link
-            href="/dashboard/services"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 text-white font-medium rounded-lg hover:bg-amber-700 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Volver a Servicios
-          </Link>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -154,7 +129,7 @@ export default function BulkImportPage() {
         onReset={handleReset}
       />
 
-      {/* Zona de Drag & Drop */}
+      {/* Paso 3: Configuración de Carga (siempre habilitado para el cliente logueado) */}
       {importStatus !== 'success' && (
         <FileDropzone onDataParsed={handleDataParsed} onError={handleError} />
       )}

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Client } from '@/types/database.types'
 import { Pencil, Package, MapPinned } from 'lucide-react'
 import { NewClientModal } from './NewClientModal'
+import { DeleteClientButton } from './DeleteClientButton'
 
 interface ServiceType {
   id: string
@@ -125,14 +126,20 @@ export function ClientsTable({ clients, serviceTypes, clientServiceTypes, canEdi
                   </td>
                   {canEdit && (
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                      <button
-                        onClick={() => handleEditClick(client)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors"
-                        title="Editar cliente"
-                      >
-                        <Pencil className="h-4 w-4" />
-                        Editar
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleEditClick(client)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors"
+                          title="Editar cliente"
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Editar
+                        </button>
+                        <DeleteClientButton
+                          clientId={client.id}
+                          clientName={client.company_name ?? 'este cliente'}
+                        />
+                      </div>
                     </td>
                   )}
                 </tr>

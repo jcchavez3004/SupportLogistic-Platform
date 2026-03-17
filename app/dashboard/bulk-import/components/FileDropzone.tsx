@@ -5,6 +5,14 @@ import { Upload, FileSpreadsheet, X, AlertCircle } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
 export interface ParsedRow {
+  // Nuevas columnas principales del Excel
+  origen: string
+  destino: string
+  fecha: string
+  tipo_vehiculo: string
+  descripcion: string
+  referencia: string
+  // Campos opcionales heredados del formato anterior
   destinatario: string
   direccion: string
   telefono: string
@@ -17,27 +25,86 @@ interface FileDropzoneProps {
   onError: (error: string) => void
 }
 
+function normalizeHeader(header: string): string {
+  return header
+    // Eliminar BOM y caracteres invisibles que Excel inyecta
+    .replace(/[\uFEFF\u200B\u200C\u200D\u00A0]/g, '')
+    // Normalizar unicode y eliminar tildes/diacríticos
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    // Lowercase y trim
+    .toLowerCase()
+    .trim()
+    // Puntuación y separadores → espacio
+    .replace(/[\.\,\;\:\(\)\[\]\{\}\-_\/\\]/g, ' ')
+    // Colapsar espacios múltiples
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 // Mapeo de nombres de columnas (flexibilidad para variaciones)
 const COLUMN_MAPPINGS: Record<string, keyof ParsedRow> = {
+  // Origen
+  'origen': 'origen',
+  'origin': 'origen',
+  'ciudad origen': 'origen',
+  'direccion origen': 'origen',
+  'dir origen': 'origen',
+  // Destino
+  'destino': 'destino',
+  'destination': 'destino',
+  'ciudad destino': 'destino',
+  // Fecha
+  'fecha': 'fecha',
+  'date': 'fecha',
+  'fecha servicio': 'fecha',
+  'fecha programada': 'fecha',
+  'fecha de servicio': 'fecha',
+  // Tipo de vehículo — variantes críticas
+  'tipo vehiculo': 'tipo_vehiculo',
+  'tipo de vehiculo': 'tipo_vehiculo',
+  'vehiculo': 'tipo_vehiculo',
+  'vehicle type': 'tipo_vehiculo',
+  'vehicle': 'tipo_vehiculo',
+  'tipo de vehiculo requerido': 'tipo_vehiculo',
+  // Descripción
+  'descripcion': 'descripcion',
+  'description': 'descripcion',
+  'detalle': 'descripcion',
+  'detalles': 'descripcion',
+  'contenido': 'descripcion',
+  // Referencia
+  'referencia': 'referencia',
+  'reference': 'referencia',
+  'ref': 'referencia',
+  'pedido': 'referencia',
+  'orden': 'referencia',
+  'numero referencia': 'referencia',
+  // Destinatario
   'destinatario': 'destinatario',
   'nombre': 'destinatario',
   'nombre destinatario': 'destinatario',
   'cliente': 'destinatario',
+  'recipient': 'destinatario',
+  'nombre receptor': 'destinatario',
+  // Dirección
   'direccion': 'direccion',
-  'dirección': 'direccion',
   'direccion entrega': 'direccion',
-  'dirección entrega': 'direccion',
+  'direccion de entrega': 'direccion',
   'address': 'direccion',
+  // Teléfono (legado)
   'telefono': 'telefono',
-  'teléfono': 'telefono',
   'celular': 'telefono',
   'phone': 'telefono',
   'tel': 'telefono',
+  // Localidad (legado — se usa para zone_label automático)
   'localidad': 'localidad',
   'zona': 'localidad',
   'barrio': 'localidad',
   'sector': 'localidad',
+  // Observaciones (legado)
   'observaciones': 'observaciones',
+  'observacion': 'observaciones',
   'notas': 'observaciones',
   'comentarios': 'observaciones',
   'notes': 'observaciones',
@@ -81,20 +148,39 @@ export function FileDropzone({ onDataParsed, onError }: FileDropzoneProps) {
       const headers = Object.keys(rawData[0])
       const columnMap: Record<string, keyof ParsedRow> = {}
 
+      console.log('[bulk-import] Headers detectadas:', headers)
+
       headers.forEach((header) => {
-        const normalized = header.toLowerCase().trim()
+        const normalized = normalizeHeader(header)
         if (COLUMN_MAPPINGS[normalized]) {
           columnMap[header] = COLUMN_MAPPINGS[normalized]
         }
       })
 
-      // Verificar columnas requeridas
-      const requiredFields: (keyof ParsedRow)[] = ['destinatario', 'direccion']
-      const mappedFields = Object.values(columnMap)
-      const missingFields = requiredFields.filter(f => !mappedFields.includes(f))
+      console.log('[bulk-import] Mapeo de columnas:', columnMap)
 
-      if (missingFields.length > 0) {
-        onError(`Faltan columnas requeridas: ${missingFields.join(', ')}. Columnas encontradas: ${headers.join(', ')}`)
+      // Verificar columnas requeridas (por NOMBRE de cabecera normalizado).
+      // Solo se exigen: Origen, Destino y Fecha. La columna de Tipo de Vehiculo
+      // se mapea si existe, pero ya no es obligatoria.
+      const normalizedHeaders = headers.map((h) => normalizeHeader(h))
+      const requiredHeaderNames = ['origen', 'destino', 'fecha']
+      const missingRequired = requiredHeaderNames.filter(
+        (req) => !normalizedHeaders.includes(req)
+      )
+
+      // DEBUG TEMPORAL — remover tras confirmar fix
+      console.log('[FileDropzone debug]', {
+        rawHeaders: headers,
+        normalizedHeaders: headers.map(normalizeHeader),
+        columnMapResult: columnMap,
+      })
+
+      if (missingRequired.length > 0) {
+        console.log('[bulk-import] Columnas requeridas faltantes (por nombre):', missingRequired)
+        onError(
+          'Faltan columnas requeridas: Origen, Destino y Fecha. ' +
+            `Columnas encontradas: ${headers.join(', ')}`
+        )
         setIsProcessing(false)
         return
       }
@@ -102,6 +188,12 @@ export function FileDropzone({ onDataParsed, onError }: FileDropzoneProps) {
       // Transformar datos
       const parsedData: ParsedRow[] = rawData.map((row) => {
         const parsed: ParsedRow = {
+          origen: '',
+          destino: '',
+          fecha: '',
+          tipo_vehiculo: '',
+          descripcion: '',
+          referencia: '',
           destinatario: '',
           direccion: '',
           telefono: '',
@@ -121,7 +213,7 @@ export function FileDropzone({ onDataParsed, onError }: FileDropzoneProps) {
 
       // Filtrar filas vacías
       const validData = parsedData.filter(row => 
-        row.destinatario || row.direccion
+        row.destino || row.direccion || row.origen
       )
 
       if (validData.length === 0) {
@@ -252,7 +344,7 @@ export function FileDropzone({ onDataParsed, onError }: FileDropzoneProps) {
           <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
           <div>
             <p className="font-medium text-gray-600 mb-1">Columnas esperadas:</p>
-            <p>Destinatario, Direccion, Telefono, Localidad, Observaciones</p>
+            <p>Origen, Destino, Fecha, Tipo de Vehiculo, Descripcion, Referencia</p>
           </div>
         </div>
       </div>

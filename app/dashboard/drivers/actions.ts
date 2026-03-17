@@ -2,64 +2,127 @@
 
 import { createClient } from '@/utils/supabase/server'
 
+export type Driver = {
+  id: string
+  full_name: string | null
+  email: string | null
+  phone: string | null
+  vehicle_plate: string | null
+  status: string | null
+}
+
+function isMissingColumnError(message: unknown) {
+  return typeof message === 'string' && /column .* does not exist/i.test(message)
+}
+
 export async function getDrivers() {
   const supabase = await createClient()
 
-  const { data, error } = await supabase
-    .from('profiles')
-    // Evitamos depender de `email` en `profiles` (normalmente vive en `auth.users`)
-    .select('id, full_name, phone, vehicle_plate, status')
-    .eq('role', 'conductor')
-    .order('full_name', { ascending: true })
-
-  if (error) {
-    const details = {
-      message: (error as any)?.message,
-      code: (error as any)?.code,
-      details: (error as any)?.details,
-      hint: (error as any)?.hint,
-    }
-
-    // Si el error es por columnas inexistentes en `profiles`, hacemos fallback
-    // a columnas mínimas para no romper la pantalla.
-    if (typeof details.message === 'string' && /column .* does not exist/i.test(details.message)) {
-      console.error('Error fetching drivers (missing columns). Falling back:', details)
-
-      const fallback = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .eq('role', 'conductor')
-        .order('full_name', { ascending: true })
-
-      if (fallback.error) {
-        console.error('Error fetching drivers fallback:', {
-          message: (fallback.error as any)?.message,
-          code: (fallback.error as any)?.code,
-          details: (fallback.error as any)?.details,
-          hint: (fallback.error as any)?.hint,
-        })
-        throw new Error('No se pudieron cargar los conductores.')
-      }
-
-      return (fallback.data ?? []).map((d) => ({
+  // `profiles` varía mucho entre proyectos. Para evitar el error
+  // "column does not exist", probamos combinaciones comunes:
+  // - `full_name` (y opcionalmente `email`)
+  // - `first_name` + `last_name` (y opcionalmente `email`)
+  const attempts: Array<{
+    select: string
+    order?: { column: string; ascending: boolean }
+    map: (row: any) => Driver
+  }> = [
+    {
+      select: 'id, full_name, email',
+      order: { column: 'full_name', ascending: true },
+      map: (d) => ({
         id: d.id,
-        full_name: d.full_name,
+        full_name: d.full_name ?? null,
+        email: d.email ?? null,
         phone: null,
         vehicle_plate: null,
         status: null,
-      }))
+      }),
+    },
+    {
+      select: 'id, full_name',
+      order: { column: 'full_name', ascending: true },
+      map: (d) => ({
+        id: d.id,
+        full_name: d.full_name ?? null,
+        email: null,
+        phone: null,
+        vehicle_plate: null,
+        status: null,
+      }),
+    },
+    {
+      select: 'id, first_name, last_name, email',
+      order: { column: 'first_name', ascending: true },
+      map: (d) => {
+        const fn = typeof d.first_name === 'string' ? d.first_name.trim() : ''
+        const ln = typeof d.last_name === 'string' ? d.last_name.trim() : ''
+        const full = `${fn} ${ln}`.trim()
+        return {
+          id: d.id,
+          full_name: full.length ? full : null,
+          email: d.email ?? null,
+          phone: null,
+          vehicle_plate: null,
+          status: null,
+        }
+      },
+    },
+    {
+      select: 'id, first_name, last_name',
+      order: { column: 'first_name', ascending: true },
+      map: (d) => {
+        const fn = typeof d.first_name === 'string' ? d.first_name.trim() : ''
+        const ln = typeof d.last_name === 'string' ? d.last_name.trim() : ''
+        const full = `${fn} ${ln}`.trim()
+        return {
+          id: d.id,
+          full_name: full.length ? full : null,
+          email: null,
+          phone: null,
+          vehicle_plate: null,
+          status: null,
+        }
+      },
+    },
+  ]
+
+  let lastError: any = null
+
+  for (const attempt of attempts) {
+    const q = supabase.from('profiles').select(attempt.select).eq('role', 'conductor')
+    const query = attempt.order
+      ? q.order(attempt.order.column as any, { ascending: attempt.order.ascending })
+      : q
+
+    const { data, error } = await query
+
+    if (!error) {
+      return (data ?? []).map(attempt.map)
     }
 
-    console.error('Error fetching drivers:', details)
+    lastError = error
+    const message = (error as any)?.message
+
+    if (isMissingColumnError(message)) {
+      continue
+    }
+
+    console.error('Error fetching drivers:', {
+      message,
+      code: (error as any)?.code,
+      details: (error as any)?.details,
+      hint: (error as any)?.hint,
+    })
     throw new Error('No se pudieron cargar los conductores.')
   }
 
-  return (data ?? []).map((d) => ({
-    id: d.id,
-    full_name: d.full_name,
-    phone: (d as any).phone ?? null,
-    vehicle_plate: (d as any).vehicle_plate ?? null,
-    status: (d as any).status ?? null,
-  }))
+  console.error('Error fetching drivers (all attempts failed):', {
+    message: (lastError as any)?.message,
+    code: (lastError as any)?.code,
+    details: (lastError as any)?.details,
+    hint: (lastError as any)?.hint,
+  })
+  throw new Error('No se pudieron cargar los conductores.')
 }
 

@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { getCurrentProfile } from '@/utils/supabase/getCurrentProfile'
 
 export async function createNewClient(formData: FormData) {
   const supabase = await createClient()
@@ -261,4 +262,74 @@ export async function getAllClientsServiceTypes(): Promise<Record<string, string
   })
 
   return result
+}
+
+export async function deleteClient(
+  clientId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const profile = await getCurrentProfile()
+
+  if (!profile || profile.role !== 'super_admin') {
+    return { success: false, error: 'No tienes permisos para eliminar clientes.' }
+  }
+
+  if (!clientId) {
+    return { success: false, error: 'ID de cliente inválido.' }
+  }
+
+  // 1. Eliminar client_services del cliente
+  const { error: csError } = await supabase
+    .from('client_services')
+    .delete()
+    .eq('client_id', clientId)
+
+  if (csError) {
+    console.error('[deleteClient] Error eliminando client_services:', csError)
+    return { success: false, error: 'Error al eliminar servicios del cliente.' }
+  }
+
+  // 2. Desvincular profiles asociados (quedan activos sin cliente)
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .update({ client_id: null })
+    .eq('client_id', clientId)
+
+  if (profileError) {
+    console.error('[deleteClient] Error desvinculando profiles:', profileError)
+    return { success: false, error: 'Error al desvincular usuarios del cliente.' }
+  }
+
+  // 3. Eliminar servicios del cliente (si existen y hay FK constraint)
+  const { error: servicesError } = await supabase
+    .from('services')
+    .delete()
+    .eq('client_id', clientId)
+
+  if (servicesError) {
+    console.error('[deleteClient] Error eliminando services:', servicesError)
+    // No bloqueamos — intentamos eliminar el cliente igual
+  }
+
+  // 4. Eliminar el cliente
+  const { error: clientError } = await supabase
+    .from('clients')
+    .delete()
+    .eq('id', clientId)
+
+  if (clientError) {
+    console.error('[deleteClient] Error eliminando cliente:', clientError)
+    if ((clientError as any).code === '23503') {
+      return {
+        success: false,
+        error:
+          'No se puede eliminar: el cliente tiene registros asociados. ' +
+          'Elimina sus servicios primero desde el panel de Servicios.',
+      }
+    }
+    return { success: false, error: `Error: ${(clientError as Error).message}` }
+  }
+
+  revalidatePath('/dashboard/clients')
+  return { success: true }
 }
