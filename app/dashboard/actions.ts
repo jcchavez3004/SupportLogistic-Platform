@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
+import { revalidatePath } from 'next/cache'
 
 export interface ServiceStats {
   total: number
@@ -86,48 +87,6 @@ export async function getServiceStats(): Promise<ServiceStats> {
 }
 
 /**
- * Obtiene servicios asignados a un conductor.
- */
-export async function getDriverServices(driverId: string): Promise<DriverService[]> {
-  const supabase = await createClient()
-
-  const { data, error } = await supabase
-    .from('services')
-    .select(
-      `
-      id,
-      service_number,
-      status,
-      pickup_address,
-      delivery_address,
-      delivery_contact_name,
-      delivery_phone,
-      zone_label,
-      created_at,
-      clients:clients (
-        company_name
-      )
-    `
-    )
-    .eq('driver_id', driverId)
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    console.error('Error fetching driver services:', error)
-    return []
-  }
-
-  // Transformamos los datos para sacar al cliente del array
-  const formattedData = (data || []).map((service: any) => ({
-    ...service,
-    // Si clients es un array, tomamos el primero. Si no, lo dejamos igual.
-    clients: Array.isArray(service.clients) ? service.clients[0] : service.clients
-  }));
-
-  return formattedData as DriverService[];
-}
-
-/**
  * Obtiene un servicio específico por ID con datos del cliente y conductor.
  */
 export async function getServiceById(serviceId: string) {
@@ -197,4 +156,69 @@ export async function updateService(serviceId: string, formData: FormData) {
   }
 
   return { success: true }
+}
+
+/**
+ * Actualiza el estado de un servicio con campos opcionales adicionales.
+ * Solo el conductor asignado puede actualizar su propio servicio.
+ */
+export async function updateServiceStatus(
+  serviceId: string,
+  newStatus: string,
+  extraFields?: Record<string, unknown>
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'No autenticado' }
+
+  const { error } = await supabase
+    .from('services')
+    .update({ status: newStatus, ...extraFields })
+    .eq('id', serviceId)
+    .eq('driver_id', user.id)
+
+  if (error) {
+    console.error('[updateServiceStatus]', error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath('/dashboard')
+  return { success: true }
+}
+
+/**
+ * Obtiene todos los servicios del conductor con las columnas necesarias.
+ */
+export async function getDriverServices(driverId: string) {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('services')
+    .select(`
+      id, service_number, status, created_at,
+      pickup_address, pickup_contact_name, pickup_phone,
+      delivery_address, delivery_contact_name, delivery_phone,
+      observations, zone_label,
+      driver_lat, driver_lng, driver_location_updated_at,
+      started_at, picked_up_at, completed_at,
+      evidence_photo_url, evidence_photo_url_2,
+      evidence_signature_url, novedad_descripcion,
+      clients:clients (
+        company_name
+      )
+    `)
+    .eq('driver_id', driverId)
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  if (error) {
+    console.error('[getDriverServices]', error)
+    return []
+  }
+
+  const rows = data ?? []
+  return rows.map((service: any) => ({
+    ...service,
+    clients: Array.isArray(service.clients) ? service.clients[0] : service.clients,
+  }))
 }
