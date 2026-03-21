@@ -19,43 +19,16 @@ import {
   Calendar,
 } from 'lucide-react'
 import type { UserRole } from '@/utils/supabase/getCurrentProfile'
-import { updateService } from '../../../actions'
+import { updateService, type ServiceDetail } from '../../../actions'
 import { PDFDownloadButtons } from './PDFDownloadButtons'
-
-interface ServiceData {
-  id: string
-  client_id: string
-  driver_id: string | null
-  status: string
-  pickup_address: string
-  pickup_contact_name: string | null
-  pickup_phone: string | null
-  delivery_address: string
-  delivery_contact_name: string | null
-  delivery_phone: string | null
-  observations: string | null
-  evidence_photo_url: string | null
-  created_at: string
-  updated_at: string
-  clients: {
-    id: string
-    company_name: string
-    nit: string | null
-    address: string | null
-    logo_url: string | null
-  } | null
-  driver: {
-    id: string
-    full_name: string | null
-    phone: string | null
-    vehicle_plate: string | null
-  } | null
-}
+import { LiveTrackingMap } from './LiveTrackingMap'
 
 interface ServiceDetailViewProps {
-  service: ServiceData
+  service: ServiceDetail
   serviceNumber: string
   role: UserRole
+  /** ID del servicio para Realtime en el mapa (explícito desde la página). */
+  serviceId: string
 }
 
 const statusLabels: Record<string, string> = {
@@ -82,6 +55,7 @@ export function ServiceDetailView({
   service,
   serviceNumber,
   role,
+  serviceId,
 }: ServiceDetailViewProps) {
   const router = useRouter()
   const [isEditing, setIsEditing] = useState(false)
@@ -379,36 +353,51 @@ export function ServiceDetailView({
                 <Eye className="h-5 w-5 text-emerald-600" />
               </div>
               <h2 className="text-lg font-semibold text-gray-900">
-                Evidencia Fotográfica
+                Evidencia de Entrega
               </h2>
             </div>
-            {service.evidence_photo_url ? (
-              <div className="space-y-3">
-                <a
-                  href={service.evidence_photo_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block overflow-hidden rounded-lg border border-gray-200"
-                >
-                  <img
-                    src={service.evidence_photo_url}
-                    alt="Evidencia de entrega"
-                    className="h-48 w-full object-cover transition-transform hover:scale-105"
-                  />
-                </a>
-                <a
-                  href={service.evidence_photo_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800"
-                >
-                  <Eye className="h-4 w-4" />
-                  Ver imagen completa
-                </a>
+
+            {service.evidence_photo_url || service.evidence_photo_url_2 || service.evidence_signature_url ? (
+              <div className="space-y-4">
+                {/* Fotos */}
+                <div className="grid grid-cols-2 gap-3">
+                  {service.evidence_photo_url && (
+                    <a href={service.evidence_photo_url} target="_blank" rel="noopener noreferrer"
+                      className="block overflow-hidden rounded-lg border border-gray-200">
+                      <img src={service.evidence_photo_url} alt="Foto evidencia 1"
+                        className="h-36 w-full object-cover hover:scale-105 transition-transform" />
+                    </a>
+                  )}
+                  {service.evidence_photo_url_2 && (
+                    <a href={service.evidence_photo_url_2} target="_blank" rel="noopener noreferrer"
+                      className="block overflow-hidden rounded-lg border border-gray-200">
+                      <img src={service.evidence_photo_url_2} alt="Foto evidencia 2"
+                        className="h-36 w-full object-cover hover:scale-105 transition-transform" />
+                    </a>
+                  )}
+                </div>
+                {/* Firma */}
+                {service.evidence_signature_url && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                      Firma del destinatario
+                    </p>
+                    <div className="border border-gray-200 rounded-lg p-2 bg-gray-50 inline-block">
+                      <img src={service.evidence_signature_url} alt="Firma"
+                        className="h-20 object-contain" />
+                    </div>
+                  </div>
+                )}
+                {/* Timestamps */}
+                {service.completed_at && (
+                  <p className="text-xs text-gray-400">
+                    Entregado el {new Date(service.completed_at).toLocaleString('es-ES')}
+                  </p>
+                )}
               </div>
             ) : (
               <p className="text-sm text-gray-500">
-                No se ha cargado evidencia fotográfica
+                No se ha registrado evidencia de entrega
               </p>
             )}
           </div>
@@ -438,22 +427,58 @@ export function ServiceDetailView({
         )}
       </form>
 
-      {/* Mapa Placeholder */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-100">
-            <MapPin className="h-5 w-5 text-cyan-600" />
+      {/* Tracking del conductor */}
+      {(service.driver_lat && service.driver_lng) ? (
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-100">
+                <MapPin className="h-5 w-5 text-cyan-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Ubicación del Conductor
+                </h2>
+                {service.driver_location_updated_at && (
+                  <p className="text-xs text-gray-400">
+                    Actualizado: {new Date(service.driver_location_updated_at).toLocaleTimeString('es-ES')}
+                  </p>
+                )}
+              </div>
+            </div>
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
+              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+              En vivo
+            </span>
           </div>
-          <h2 className="text-lg font-semibold text-gray-900">
-            Ubicación (Próximamente)
-          </h2>
+          <LiveTrackingMap
+            lat={service.driver_lat}
+            lng={service.driver_lng}
+            deliveryAddress={service.delivery_address}
+            pickupAddress={service.pickup_address}
+            serviceId={serviceId}
+          />
         </div>
-        <div className="flex h-48 items-center justify-center rounded-lg bg-gray-100 text-gray-400">
-          <p className="text-sm">
-            Mapa de rastreo disponible en próximas versiones
-          </p>
+      ) : (
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-100">
+              <MapPin className="h-5 w-5 text-cyan-600" />
+            </div>
+            <h2 className="text-lg font-semibold text-gray-900">Ubicación</h2>
+          </div>
+          <div className="flex h-32 items-center justify-center rounded-lg bg-gray-50 border border-dashed border-gray-200">
+            <div className="text-center">
+              <Truck className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+              <p className="text-sm text-gray-400">
+                {service.driver_id
+                  ? 'El conductor aún no ha iniciado el recorrido'
+                  : 'Sin conductor asignado'}
+              </p>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

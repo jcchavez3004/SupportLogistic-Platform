@@ -86,25 +86,88 @@ export async function getServiceStats(): Promise<ServiceStats> {
   return stats
 }
 
+/** Fila de servicio con relaciones (coincide con el select de getServiceById). */
+export interface ServiceDetail {
+  id: string
+  service_number: number | null
+  client_id: string
+  driver_id: string | null
+  status: string
+  pickup_address: string
+  pickup_contact_name: string | null
+  pickup_phone: string | null
+  delivery_address: string
+  delivery_contact_name: string | null
+  delivery_phone: string | null
+  observations: string | null
+  evidence_photo_url: string | null
+  evidence_photo_url_2: string | null
+  evidence_signature_url: string | null
+  novedad_descripcion: string | null
+  driver_lat: number | null
+  driver_lng: number | null
+  driver_location_updated_at: string | null
+  started_at: string | null
+  picked_up_at: string | null
+  completed_at: string | null
+  created_at: string
+  clients: {
+    id: string
+    company_name: string
+    nit: string | null
+    address: string | null
+    logo_url: string | null
+  } | null
+  driver: {
+    id: string
+    full_name: string | null
+    phone: string | null
+    vehicle_plate: string | null
+  } | null
+}
+
 /**
  * Obtiene un servicio específico por ID con datos del cliente y conductor.
+ * Sin `updated_at` ni `select *` para evitar columnas inexistentes en la tabla.
  */
-export async function getServiceById(serviceId: string) {
+export async function getServiceById(serviceId: string): Promise<ServiceDetail | null> {
   const supabase = await createClient()
 
   const { data, error } = await supabase
     .from('services')
     .select(
       `
-      *,
-      clients:clients (
+      id,
+      service_number,
+      client_id,
+      driver_id,
+      status,
+      pickup_address,
+      pickup_contact_name,
+      pickup_phone,
+      delivery_address,
+      delivery_contact_name,
+      delivery_phone,
+      observations,
+      evidence_photo_url,
+      evidence_photo_url_2,
+      evidence_signature_url,
+      novedad_descripcion,
+      driver_lat,
+      driver_lng,
+      driver_location_updated_at,
+      started_at,
+      picked_up_at,
+      completed_at,
+      created_at,
+      clients:client_id (
         id,
         company_name,
         nit,
         address,
         logo_url
       ),
-      driver:profiles!services_driver_id_fkey (
+      driver:driver_id (
         id,
         full_name,
         phone,
@@ -120,7 +183,7 @@ export async function getServiceById(serviceId: string) {
     return null
   }
 
-  return data
+  return data as unknown as ServiceDetail
 }
 
 /**

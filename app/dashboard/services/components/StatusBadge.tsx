@@ -3,7 +3,7 @@
 import { clsx } from 'clsx'
 import { useRouter } from 'next/navigation'
 import { useMemo, useState, useTransition } from 'react'
-import { updateServiceStatus } from '../actions'
+import { updateServiceStatusByAdmin } from '../actions'
 
 const STATUSES = [
   'solicitado',
@@ -47,7 +47,7 @@ export function StatusBadge({
   const onChange = (next: string) => {
     setLocalStatus(next)
     startTransition(async () => {
-      await updateServiceStatus(serviceId, next)
+      await updateServiceStatusByAdmin(serviceId, next)
       // Refresca los datos del Server Component sin recargar toda la página manualmente
       router.refresh()
     })

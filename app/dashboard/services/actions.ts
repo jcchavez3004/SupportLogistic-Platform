@@ -223,7 +223,10 @@ export async function assignDriverToService(formData: FormData) {
   revalidatePath('/dashboard/services')
 }
 
-export async function updateServiceStatus(serviceId: string, newStatus: string) {
+export async function updateServiceStatusByAdmin(
+  serviceId: string,
+  newStatus: string
+): Promise<void> {
   const supabase = await createClient()
 
   const {

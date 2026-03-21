@@ -1,5 +1,5 @@
 import { use } from 'react'
-import { redirect, notFound } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { getServiceById } from '../../actions'
 import { getCurrentProfile } from '@/utils/supabase/getCurrentProfile'
@@ -28,19 +28,15 @@ export default async function ServiceDetailPage({ params }: ServiceDetailPagePro
   const service = await getServiceById(id)
 
   if (!service) {
-    notFound()
+    redirect('/dashboard/services')
   }
-
-  // Usar service_number de la BD, o "PENDIENTE" si es null
-  const serviceNumber = service.service_number
-    ? `#${service.service_number}`
-    : 'PENDIENTE'
 
   return (
     <ServiceDetailView
-      service={service as any}
-      serviceNumber={serviceNumber}
+      service={service}
+      serviceNumber={`#${service.service_number ?? 'S/N'}`}
       role={role}
+      serviceId={service.id}
     />
   )
 }
