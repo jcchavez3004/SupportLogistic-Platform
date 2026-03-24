@@ -1,4 +1,3 @@
-import { use } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { getServiceById } from '../../actions'
@@ -10,7 +9,7 @@ interface ServiceDetailPageProps {
 }
 
 export default async function ServiceDetailPage({ params }: ServiceDetailPageProps) {
-  const { id } = use(params)
+  const { id } = await params
   
   const supabase = await createClient()
 
