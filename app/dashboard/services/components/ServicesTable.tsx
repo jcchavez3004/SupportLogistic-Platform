@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Eye, MapPin, Flag, Calendar, ChevronRight } from 'lucide-react'
+import { ClientDate } from '@/app/components/ClientDate'
 import { StatusBadge } from './StatusBadge'
 import { AssignDriverModal } from './AssignDriverModal'
 import { EvidenceUpload } from './EvidenceUpload'
@@ -151,10 +152,7 @@ export function ServicesTable({ services, drivers, role }: ServicesTableProps) {
               <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-t border-gray-100">
                 <div className="flex items-center gap-1.5 text-xs text-gray-500">
                   <Calendar className="h-3.5 w-3.5" />
-                  {new Date(s.created_at).toLocaleDateString('es-ES', {
-                    day: '2-digit',
-                    month: 'short',
-                  })}
+                  <ClientDate date={s.created_at} options={{ day: '2-digit', month: 'short' }} />
                 </div>
                 <Link
                   href={`/dashboard/services/${s.id}`}
@@ -265,7 +263,7 @@ export function ServicesTable({ services, drivers, role }: ServicesTableProps) {
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(s.created_at).toLocaleDateString('es-ES')}
+                    <ClientDate date={s.created_at} />
                   </td>
                 </tr>
               )

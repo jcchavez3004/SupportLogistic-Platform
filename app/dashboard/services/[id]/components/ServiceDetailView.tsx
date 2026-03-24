@@ -22,6 +22,7 @@ import type { UserRole } from '@/utils/supabase/getCurrentProfile'
 import { updateService, type ServiceDetail } from '../../../actions'
 import { PDFDownloadButtons } from './PDFDownloadButtons'
 import { LiveTrackingMap } from './LiveTrackingMap'
+import { ClientDate, ClientDateTime, ClientTime } from '@/app/components/ClientDate'
 
 interface ServiceDetailViewProps {
   service: ServiceDetail
@@ -94,11 +95,10 @@ export function ServiceDetailView({
             </h1>
             <p className="text-sm text-gray-500">
               Creado el{' '}
-              {new Date(service.created_at).toLocaleDateString('es-ES', {
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-              })}
+              <ClientDate
+                date={service.created_at}
+                options={{ day: 'numeric', month: 'long', year: 'numeric' }}
+              />
             </p>
           </div>
         </div>
@@ -391,7 +391,7 @@ export function ServiceDetailView({
                 {/* Timestamps */}
                 {service.completed_at && (
                   <p className="text-xs text-gray-400">
-                    Entregado el {new Date(service.completed_at).toLocaleString('es-ES')}
+                    Entregado el <ClientDateTime date={service.completed_at} />
                   </p>
                 )}
               </div>
@@ -441,7 +441,7 @@ export function ServiceDetailView({
                 </h2>
                 {service.driver_location_updated_at && (
                   <p className="text-xs text-gray-400">
-                    Actualizado: {new Date(service.driver_location_updated_at).toLocaleTimeString('es-ES')}
+                    Actualizado: <ClientTime date={service.driver_location_updated_at} />
                   </p>
                 )}
               </div>

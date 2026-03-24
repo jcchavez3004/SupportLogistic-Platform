@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Client } from '@/types/database.types'
 import { Pencil, Package, MapPinned } from 'lucide-react'
+import { ClientDate } from '@/app/components/ClientDate'
 import { NewClientModal } from './NewClientModal'
 import { DeleteClientButton } from './DeleteClientButton'
 
@@ -122,7 +123,7 @@ export function ClientsTable({ clients, serviceTypes, clientServiceTypes, canEdi
                     {client.address || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(client.created_at).toLocaleDateString('es-ES')}
+                    <ClientDate date={client.created_at} />
                   </td>
                   {canEdit && (
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
