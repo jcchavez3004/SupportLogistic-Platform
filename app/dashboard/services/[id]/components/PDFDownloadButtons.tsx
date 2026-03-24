@@ -21,6 +21,7 @@ interface ServiceData {
   observations: string | null
   status: string
   created_at: string
+  evidence_signature_url: string | null
   clients: {
     company_name: string
     nit: string | null

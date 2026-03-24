@@ -6,6 +6,7 @@ import {
   Page,
   Text,
   View,
+  Image,
   StyleSheet,
   pdf,
 } from '@react-pdf/renderer'
@@ -21,6 +22,7 @@ interface ServiceData {
   observations: string | null
   status: string
   created_at: string
+  evidence_signature_url: string | null
   clients: {
     company_name: string
     nit: string | null
@@ -297,8 +299,18 @@ function DeliveryNotePDF({
           <View style={styles.signatureBox}>
             <Text style={styles.signatureLabel}>Firma del Remitente</Text>
           </View>
-          <View style={styles.signatureBox}>
-            <Text style={styles.signatureLabel}>Firma del Destinatario</Text>
+          <View style={[styles.signatureBox, { alignItems: 'center' }]}>
+            {service.evidence_signature_url ? (
+              <>
+                <Image
+                  src={service.evidence_signature_url}
+                  style={{ width: 140, height: 60, objectFit: 'contain', marginBottom: 6 }}
+                />
+                <Text style={styles.signatureLabel}>Firma del Destinatario</Text>
+              </>
+            ) : (
+              <Text style={styles.signatureLabel}>Firma del Destinatario</Text>
+            )}
           </View>
         </View>
 
