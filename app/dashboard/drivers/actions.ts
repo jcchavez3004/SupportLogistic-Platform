@@ -1,6 +1,9 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
+import { getCurrentProfile } from '@/utils/supabase/getCurrentProfile'
+import { createAdminClient } from '@/utils/supabase/admin'
+import { revalidatePath } from 'next/cache'
 
 export type Driver = {
   id: string
@@ -124,5 +127,96 @@ export async function getDrivers() {
     hint: (lastError as any)?.hint,
   })
   throw new Error('No se pudieron cargar los conductores.')
+}
+
+/**
+ * Crea usuario en Auth y filas en `profiles` + `drivers` con `user_id` enlazado al UUID de auth.users.
+ * Usa la service role para `auth.admin.createUser` (evita `signUp` que puede corromper la sesión del admin).
+ */
+export async function createDriver(
+  formData: FormData
+): Promise<{ success: boolean; error?: string }> {
+  const profile = await getCurrentProfile()
+  if (!profile || (profile.role !== 'super_admin' && profile.role !== 'operador')) {
+    return { success: false, error: 'No tienes permisos para crear conductores.' }
+  }
+
+  const email = (formData.get('email') as string | null)?.trim() ?? ''
+  const password = (formData.get('password') as string | null) ?? ''
+  const full_name = (formData.get('full_name') as string | null)?.trim() ?? ''
+  const phone = (formData.get('phone') as string | null)?.trim() || null
+  const vehicle_plate = (formData.get('vehicle_plate') as string | null)?.trim() || null
+
+  if (!email || !password) {
+    return { success: false, error: 'Email y contraseña son obligatorios.' }
+  }
+
+  let userId: string | null = null
+
+  try {
+    const admin = createAdminClient()
+    const { data: created, error: authError } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name },
+    })
+
+    if (authError) {
+      console.error('[createDriver] auth.admin.createUser:', authError)
+      return { success: false, error: authError.message || 'Error al crear el usuario en Auth.' }
+    }
+
+    userId = created.user?.id ?? null
+    console.log('[createDriver] user_id antes de insert drivers:', userId, {
+      isNull: userId === null,
+      isUndefined: userId === undefined,
+    })
+
+    if (!userId) {
+      return {
+        success: false,
+        error:
+          'No se obtuvo user_id tras crear el usuario. Revisa políticas de Auth y logs de Supabase.',
+      }
+    }
+
+    const { error: profileError } = await admin.from('profiles').upsert(
+      {
+        id: userId,
+        role: 'conductor',
+        full_name: full_name || null,
+        phone,
+        vehicle_plate,
+      },
+      { onConflict: 'id' }
+    )
+
+    if (profileError) {
+      console.error('[createDriver] profiles upsert:', profileError)
+      return { success: false, error: `Perfil: ${profileError.message}` }
+    }
+
+    const driverPayload = {
+      user_id: userId,
+      phone,
+      vehicle_plate,
+    }
+    console.log('[createDriver] insert drivers payload:', driverPayload)
+
+    const { error: driverError } = await admin.from('drivers').insert(driverPayload)
+
+    if (driverError) {
+      console.error('[createDriver] drivers insert:', driverError)
+      return { success: false, error: `Conductores: ${driverError.message}` }
+    }
+
+    revalidatePath('/dashboard/drivers')
+    return { success: true }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Error desconocido'
+    console.error('[createDriver]', e)
+    return { success: false, error: message }
+  }
 }
 

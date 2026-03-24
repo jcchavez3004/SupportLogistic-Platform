@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { getDrivers } from './actions'
 import { Phone, Truck, IdCard, User } from 'lucide-react'
+import { NewDriverForm } from './components/NewDriverForm'
 
 export default async function DriversPage() {
   const supabase = await createClient()
@@ -27,14 +28,7 @@ export default async function DriversPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          disabled
-          className="inline-flex items-center justify-center w-full sm:w-auto px-4 py-3 sm:py-2 border border-gray-200 text-sm font-medium rounded-lg text-gray-700 bg-white shadow-sm hover:bg-gray-50 disabled:opacity-60 touch-manipulation"
-          title="Por ahora se gestionan desde Supabase (Auth)"
-        >
-          Nuevo Conductor
-        </button>
+        <NewDriverForm />
       </div>
 
       {/* ========== VISTA MÓVIL: Tarjetas ========== */}
