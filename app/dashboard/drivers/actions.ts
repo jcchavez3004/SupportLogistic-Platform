@@ -129,6 +129,82 @@ export async function getDrivers() {
   throw new Error('No se pudieron cargar los conductores.')
 }
 
+const DOC_LABELS: Record<string, string> = {
+  doc_cedula: 'Cédula',
+  doc_licencia: 'Licencia de Conducción',
+  doc_arl: 'ARL',
+}
+
+function getExtFromMime(mime: string): string {
+  if (mime === 'application/pdf') return 'pdf'
+  if (mime === 'image/jpeg') return 'jpg'
+  if (mime === 'image/png') return 'png'
+  if (mime === 'image/webp') return 'webp'
+  return 'bin'
+}
+
+/**
+ * Sube un documento de conductor a Supabase Storage (bucket `driver-docs`).
+ * Ruta: `{userId}/{docType}.{ext}`
+ */
+async function uploadDriverDocument(
+  adminClient: ReturnType<typeof createAdminClient>,
+  userId: string,
+  docType: string,
+  file: File
+): Promise<{ success: boolean; url?: string; error?: string }> {
+  const MAX_SIZE = 10 * 1024 * 1024 // 10 MB
+  if (file.size > MAX_SIZE) {
+    return { success: false, error: `${DOC_LABELS[docType] ?? docType}: máximo 10 MB.` }
+  }
+
+  const ext = getExtFromMime(file.type)
+  const filePath = `${userId}/${docType}.${ext}`
+  const bytes = await file.arrayBuffer()
+
+  const { error: upError } = await adminClient.storage
+    .from('driver-docs')
+    .upload(filePath, bytes, {
+      contentType: file.type || 'application/octet-stream',
+      upsert: true,
+    })
+
+  if (upError) {
+    console.error(`[uploadDriverDocument] ${docType}:`, upError)
+    return { success: false, error: upError.message }
+  }
+
+  const { data: urlData } = adminClient.storage.from('driver-docs').getPublicUrl(filePath)
+  return { success: true, url: urlData?.publicUrl ?? undefined }
+}
+
+/**
+ * Acción pública para subir un documento de un conductor existente.
+ */
+export async function uploadDriverDoc(
+  formData: FormData
+): Promise<{ success: boolean; error?: string }> {
+  const profile = await getCurrentProfile()
+  if (!profile || (profile.role !== 'super_admin' && profile.role !== 'operador')) {
+    return { success: false, error: 'Sin permisos.' }
+  }
+
+  const driverId = (formData.get('driver_id') as string | null)?.trim() ?? ''
+  const docType = (formData.get('doc_type') as string | null)?.trim() ?? ''
+  const file = formData.get('file') as File | null
+
+  if (!driverId || !docType || !file || file.size === 0) {
+    return { success: false, error: 'Faltan datos: driver_id, doc_type y file son requeridos.' }
+  }
+
+  try {
+    const admin = createAdminClient()
+    return await uploadDriverDocument(admin, driverId, docType, file)
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : 'Error desconocido' }
+  }
+}
+
 /**
  * Crea usuario en Auth y filas en `profiles` + `drivers` con `user_id` enlazado al UUID de auth.users.
  * Usa la service role para `auth.admin.createUser` (evita `signUp` que puede corromper la sesión del admin).
@@ -202,13 +278,23 @@ export async function createDriver(
       phone,
       vehicle_plate,
     }
-    console.log('[createDriver] insert drivers payload:', driverPayload)
 
     const { error: driverError } = await admin.from('drivers').insert(driverPayload)
 
     if (driverError) {
       console.error('[createDriver] drivers insert:', driverError)
       return { success: false, error: `Conductores: ${driverError.message}` }
+    }
+
+    // Subir documentos si fueron adjuntados
+    const docTypes = ['doc_cedula', 'doc_licencia', 'doc_arl'] as const
+    for (const docType of docTypes) {
+      const file = formData.get(docType) as File | null
+      if (!file || file.size === 0) continue
+      const uploadResult = await uploadDriverDocument(admin, userId, docType, file)
+      if (!uploadResult.success) {
+        console.warn(`[createDriver] ${docType} upload failed:`, uploadResult.error)
+      }
     }
 
     revalidatePath('/dashboard/drivers')
