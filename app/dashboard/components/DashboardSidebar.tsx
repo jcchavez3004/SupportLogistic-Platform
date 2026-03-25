@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Home, Building2, Truck, Users, FileSpreadsheet, LayoutGrid, LogOut } from 'lucide-react'
+import { Home, Building2, Truck, Users, FileSpreadsheet, LayoutGrid, LogOut, ShieldCheck } from 'lucide-react'
 import { clsx } from 'clsx'
 import type { UserRole } from '@/utils/supabase/getCurrentProfile'
 import { createClient } from '@/utils/supabase/client'
@@ -14,6 +14,7 @@ const allNavigation = [
   { name: 'Operaciones', href: '/dashboard/operations', icon: LayoutGrid, roles: ['super_admin', 'operador'] },
   { name: 'Importar Masivo', href: '/dashboard/bulk-import', icon: FileSpreadsheet, roles: ['cliente'] },
   { name: 'Conductores', href: '/dashboard/drivers', icon: Users, roles: ['super_admin', 'operador'] },
+  { name: 'Staff', href: '/dashboard/staff', icon: ShieldCheck, roles: ['super_admin'] },
 ]
 
 interface DashboardSidebarProps {
