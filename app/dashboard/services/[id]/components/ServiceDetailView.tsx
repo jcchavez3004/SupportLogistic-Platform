@@ -19,9 +19,11 @@ import {
   Calendar,
 } from 'lucide-react'
 import type { UserRole } from '@/utils/supabase/getCurrentProfile'
+import type { DriverDoc } from '@/app/dashboard/drivers/actions'
 import { updateService, type ServiceDetail } from '../../../actions'
 import { PDFDownloadButtons } from './PDFDownloadButtons'
 import { LiveTrackingMap } from './LiveTrackingMap'
+import { DriverDocsViewer } from './DriverDocsViewer'
 import { ClientDate, ClientDateTime, ClientTime } from '@/app/components/ClientDate'
 
 interface ServiceDetailViewProps {
@@ -30,6 +32,8 @@ interface ServiceDetailViewProps {
   role: UserRole
   /** ID del servicio para Realtime en el mapa (explícito desde la página). */
   serviceId: string
+  driverDocs?: DriverDoc[]
+  driverName?: string | null
 }
 
 const statusLabels: Record<string, string> = {
@@ -57,6 +61,8 @@ export function ServiceDetailView({
   serviceNumber,
   role,
   serviceId,
+  driverDocs,
+  driverName,
 }: ServiceDetailViewProps) {
   const router = useRouter()
   const [isEditing, setIsEditing] = useState(false)
@@ -426,6 +432,21 @@ export function ServiceDetailView({
           </div>
         )}
       </form>
+
+      {/* Documentos del conductor */}
+      {service.driver_id && driverDocs && driverDocs.length > 0 && (
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100">
+              <FileText className="h-5 w-5 text-amber-600" />
+            </div>
+            <h2 className="text-lg font-semibold text-gray-900">
+              Documentos del Conductor
+            </h2>
+          </div>
+          <DriverDocsViewer docs={driverDocs} driverName={driverName ?? null} />
+        </div>
+      )}
 
       {/* Tracking del conductor */}
       {(service.driver_lat && service.driver_lng) ? (

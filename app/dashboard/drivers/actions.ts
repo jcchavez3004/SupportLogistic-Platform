@@ -306,3 +306,93 @@ export async function createDriver(
   }
 }
 
+// ─── Tipos para documentos ────────────────────────────────────────────────────
+
+export type DriverDoc = {
+  key: 'doc_cedula' | 'doc_licencia' | 'doc_arl'
+  label: string
+  url: string | null
+  exists: boolean
+}
+
+// ─── Obtener URLs de documentos de un conductor ───────────────────────────────
+
+/**
+ * Busca los documentos de un conductor en el bucket driver-docs.
+ * Prueba extensiones comunes: pdf, jpg, png, webp
+ * Devuelve la URL pública si existe o null si no hay documento.
+ */
+export async function getDriverDocuments(driverId: string): Promise<DriverDoc[]> {
+  const profile = await getCurrentProfile()
+  if (!profile) return []
+
+  const allowedRoles = ['super_admin', 'operador', 'conductor']
+  if (!allowedRoles.includes(profile.role)) return []
+
+  const admin = createAdminClient()
+  const extensions = ['pdf', 'jpg', 'jpeg', 'png', 'webp']
+
+  const docTypes: { key: DriverDoc['key']; label: string }[] = [
+    { key: 'doc_cedula', label: 'Cédula' },
+    { key: 'doc_licencia', label: 'Licencia de Conducción' },
+    { key: 'doc_arl', label: 'ARL' },
+  ]
+
+  const results: DriverDoc[] = []
+
+  for (const doc of docTypes) {
+    let foundUrl: string | null = null
+
+    for (const ext of extensions) {
+      const filePath = `${driverId}/${doc.key}.${ext}`
+      const { data } = await admin.storage
+        .from('driver-docs')
+        .list(driverId, { search: `${doc.key}.${ext}` })
+
+      if (data && data.length > 0) {
+        const { data: urlData } = admin.storage
+          .from('driver-docs')
+          .getPublicUrl(filePath)
+        foundUrl = urlData?.publicUrl ?? null
+        break
+      }
+    }
+
+    results.push({
+      key: doc.key,
+      label: doc.label,
+      url: foundUrl,
+      exists: foundUrl !== null,
+    })
+  }
+
+  return results
+}
+
+/**
+ * Versión para clientes: obtiene documentos del conductor asignado a un servicio.
+ * El cliente solo puede ver documentos del conductor de SUS servicios.
+ */
+export async function getDriverDocsForService(
+  serviceId: string
+): Promise<DriverDoc[]> {
+  const supabase = await createClient()
+  const profile = await getCurrentProfile()
+  if (!profile) return []
+
+  let query = supabase
+    .from('services')
+    .select('driver_id, client_id')
+    .eq('id', serviceId)
+
+  if (profile.role === 'cliente') {
+    query = query.eq('client_id', profile.client_id ?? '')
+  }
+
+  const { data: service } = await query.single()
+
+  if (!service?.driver_id) return []
+
+  return getDriverDocuments(service.driver_id)
+}
+

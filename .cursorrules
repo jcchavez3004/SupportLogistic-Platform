@@ -1,0 +1,237 @@
+# SupportLogistic-Platform — Cursor Rules
+# Estas reglas aplican a TODOS los prompts en este proyecto.
+# Coloca este archivo en la raíz del proyecto como: .cursorrules
+
+## 🧠 ROL
+Actúa siempre como un Arquitecto de Software Senior Fullstack especializado
+en Next.js App Router, Supabase y TypeScript estricto.
+
+---
+
+## 🏗️ STACK TECNOLÓGICO
+
+- **Framework**: Next.js 16.1.1 con App Router (NO Pages Router)
+- **Lenguaje**: TypeScript estricto — nunca usar `any` sin justificación
+- **Base de datos**: Supabase (PostgreSQL) con Row Level Security (RLS) habilitado
+- **Auth**: Supabase Auth con `@supabase/ssr` (NO `@supabase/auth-helpers-nextjs`)
+- **Estilos**: Tailwind CSS v4
+- **Gestor de paquetes**: pnpm (con `strict-peer-dependencies=false`)
+- **Iconos**: lucide-react
+- **PDF**: @react-pdf/renderer
+- **Excel/CSV**: xlsx (SheetJS)
+- **Mapas**: Leaflet con OpenStreetMap (sin Google Maps API key)
+- **Editor**: Cursor AI
+
+---
+
+## 📁 ESTRUCTURA DEL PROYECTO
+
+```
+app/
+  dashboard/
+    page.tsx              ← Dashboard principal (detecta rol y renderiza)
+    layout.tsx            ← Layout con sidebar y header
+    actions.ts            ← Server actions del dashboard (getDriverServices, updateServiceStatus)
+    components/
+      DashboardSidebar.tsx
+      DashboardHeader.tsx
+      DriverDashboard.tsx  ← UI mobile-first del conductor
+      LocationTracker.tsx  ← GPS background tracker
+      EvidenceCapture.tsx  ← Cámara + firma canvas
+    bulk-import/           ← Importación masiva de servicios
+    clients/               ← Gestión de clientes
+    drivers/               ← Gestión de conductores
+    services/              ← Gestión de servicios/envíos
+      [id]/                ← Detalle de servicio con mapa Leaflet
+    staff/                 ← Gestión de staff (operadores y admins)
+    operations/            ← Panel de operaciones
+utils/
+  supabase/
+    server.ts              ← createClient() para Server Components
+    client.ts              ← createClient() para Client Components
+    admin.ts               ← createAdminClient() con service_role
+    getCurrentProfile.ts   ← Helper para obtener perfil del usuario
+```
+
+---
+
+## 🔑 IMPORTS DE SUPABASE — REGLA CRÍTICA
+
+```typescript
+// ✅ Server Components y Server Actions:
+import { createClient } from '@/utils/supabase/server'
+
+// ✅ Client Components ('use client'):
+import { createClient } from '@/utils/supabase/client'
+
+// ✅ Admin operations (crear/eliminar usuarios en Auth):
+import { createAdminClient } from '@/utils/supabase/admin'
+
+// ❌ NUNCA usar:
+// import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+// import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
+```
+
+---
+
+## 🗄️ SCHEMA DE BASE DE DATOS
+
+### Tabla: `profiles`
+```
+id            uuid (FK → auth.users.id)
+full_name     text
+role          user_role enum ('super_admin', 'operador', 'conductor', 'cliente')
+client_id     uuid (FK → clients.id) — solo para clientes
+phone         text
+vehicle_plate text — solo para conductores
+```
+
+### Tabla: `clients`
+```
+id            uuid
+company_name  text NOT NULL
+nit           text
+address       text
+logo_url      text
+created_at    timestamptz
+```
+
+### Tabla: `services`
+```
+id                          uuid
+service_number              bigint (autoincrement)
+client_id                   uuid NOT NULL (FK → clients.id)
+driver_id                   uuid (FK → profiles.id)
+status                      service_status enum:
+                            'solicitado' | 'asignado' | 'en_curso_recogida' |
+                            'recogido' | 'en_curso_entrega' | 'entregado' | 'novedad'
+pickup_address              text NOT NULL
+pickup_contact_name         text
+pickup_phone                text
+pickup_lat / pickup_lng     double precision
+delivery_address            text NOT NULL
+delivery_contact_name       text
+delivery_phone              text
+delivery_lat / delivery_lng double precision
+observations                text
+evidence_photo_url          text
+evidence_photo_url_2        text
+evidence_signature_url      text
+driver_lat / driver_lng     double precision  ← GPS del conductor en tiempo real
+driver_location_updated_at  timestamptz
+started_at                  timestamptz
+picked_up_at                timestamptz
+completed_at                timestamptz
+novedad_descripcion         text
+zone_label                  text
+service_type_id             uuid (FK → service_types.id)
+created_at                  timestamptz
+```
+⚠️ La tabla services NO tiene columna `updated_at`.
+
+### Tabla: `service_types`
+```
+id               uuid
+name             text ('Servicio por Zonas', 'Recibo y Entrega')
+requires_zoning  boolean
+```
+
+### Tabla: `client_services`
+```
+client_id        uuid
+service_type_id  uuid
+enabled          boolean DEFAULT true
+```
+
+### Supabase Storage Buckets:
+- `evidence` — public — fotos y firmas de entregas
+- `driver-docs` — cédula, licencia, ARL de conductores
+
+---
+
+## 👥 ROLES Y PERMISOS
+
+| Rol | Acceso |
+|-----|--------|
+| `super_admin` | Todo — puede crear/eliminar usuarios, ver todos los servicios |
+| `operador` | Servicios, operaciones, conductores — no puede gestionar staff |
+| `conductor` | Solo su dashboard mobile con sus servicios asignados |
+| `cliente` | Solo sus propios servicios |
+
+---
+
+## 🚦 FLUJO DE ESTADOS DE SERVICIOS
+
+```
+solicitado → asignado → en_curso_recogida → recogido → en_curso_entrega → entregado
+                                                    ↘ novedad (en cualquier estado activo)
+```
+
+---
+
+## ⚙️ CONVENCIONES DE CÓDIGO
+
+### Server Actions
+```typescript
+'use server'
+// Siempre verificar sesión primero
+// Usar createAdminClient() solo para operaciones que requieren service_role
+// Siempre llamar revalidatePath() al final
+// Retornar { success: boolean; error?: string } en acciones de mutación
+```
+
+### Client Components
+```typescript
+'use client'
+// Usar useTransition() para llamadas a server actions
+// Nunca usar localStorage — usar state de React
+// Para modales: estado local con useState, nunca router.push
+```
+
+### Nomenclatura
+```
+Server actions:  getXxx(), createXxx(), updateXxx(), deleteXxx()
+Componentes:     XxxPage (páginas), XxxModal, XxxTable, XxxButton
+Tipos:           export type Xxx = { ... }
+```
+
+---
+
+## 📱 DISEÑO MOBILE-FIRST
+
+El módulo de conductores es 100% mobile. Siempre:
+- Touch targets mínimo 44px de altura
+- `active:scale-[0.98]` en botones principales
+- Clases `md:hidden` para vista móvil, `hidden md:block` para desktop
+- Texto mínimo `text-sm` en móvil
+
+---
+
+## ⛔ REGLAS ABSOLUTAS
+
+1. **NUNCA** seleccionar `updated_at` de la tabla `services` — no existe
+2. **NUNCA** importar CSS de Leaflet en el nivel superior — solo dentro de `useEffect` con `await import('leaflet/dist/leaflet.css')`
+3. **NUNCA** usar `import 'leaflet'` estático — siempre `await import('leaflet')` dentro de useEffect
+4. **NUNCA** exponer `SUPABASE_SERVICE_ROLE_KEY` en variables `NEXT_PUBLIC_`
+5. **NUNCA** usar `createClientComponentClient` de `@supabase/auth-helpers-nextjs`
+6. Siempre verificar permisos por rol antes de cualquier operación de escritura
+7. El `updateServiceStatus` en `services/actions.ts` se llama `updateServiceStatusByAdmin` para evitar conflicto con el de `dashboard/actions.ts`
+
+---
+
+## 🌐 ENTORNOS
+
+- **Desarrollo**: `localhost:3000` — `pnpm dev`
+- **Producción**: `https://app.supportlogistic.co` (Vercel + dominio propio)
+- **Repositorio**: `https://github.com/jcchavez3004/SupportLogistic-Platform`
+- **Branch principal**: `main` → deploy automático en Vercel
+
+---
+
+## 💡 ANTES DE CADA CAMBIO
+
+1. Lee el archivo completo antes de modificarlo
+2. Mantén la lógica existente que funciona
+3. Solo cambia lo que el prompt pide explícitamente
+4. Verifica TypeScript después de cada cambio
+5. Si hay dudas sobre el schema, pregunta antes de asumir

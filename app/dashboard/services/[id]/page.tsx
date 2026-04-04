@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { getServiceById } from '../../actions'
 import { getCurrentProfile } from '@/utils/supabase/getCurrentProfile'
+import { getDriverDocsForService } from '@/app/dashboard/drivers/actions'
 import { ServiceDetailView } from './components/ServiceDetailView'
 
 interface ServiceDetailPageProps {
@@ -30,12 +31,18 @@ export default async function ServiceDetailPage({ params }: ServiceDetailPagePro
     redirect('/dashboard/services')
   }
 
+  const driverDocs = service.driver_id
+    ? await getDriverDocsForService(service.id).catch(() => [])
+    : []
+
   return (
     <ServiceDetailView
       service={service}
       serviceNumber={`#${service.service_number ?? 'S/N'}`}
       role={role}
       serviceId={service.id}
+      driverDocs={driverDocs}
+      driverName={service.driver?.full_name ?? null}
     />
   )
 }

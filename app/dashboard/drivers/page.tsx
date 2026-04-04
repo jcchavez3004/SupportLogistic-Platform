@@ -1,8 +1,10 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
-import { getDrivers } from './actions'
+import { getDrivers, getDriverDocuments } from './actions'
+import type { DriverDoc } from './actions'
 import { Phone, Truck, IdCard, User } from 'lucide-react'
 import { NewDriverForm } from './components/NewDriverForm'
+import { DriverDocsPanel } from './components/DriverDocsPanel'
 
 export default async function DriversPage() {
   const supabase = await createClient()
@@ -16,6 +18,13 @@ export default async function DriversPage() {
   }
 
   const drivers = await getDrivers()
+
+  const docsResults = await Promise.all(
+    drivers.map((d) => getDriverDocuments(d.id).catch(() => [] as DriverDoc[]))
+  )
+  const docsMap = new Map<string, DriverDoc[]>(
+    drivers.map((d, i) => [d.id, docsResults[i]])
+  )
 
   return (
     <div className="space-y-6">
@@ -99,16 +108,12 @@ export default async function DriversPage() {
                 </div>
               </div>
 
-              {/* Pie de la tarjeta - Botón de acción */}
+              {/* Documentos del conductor */}
               <div className="px-4 py-3 border-t border-gray-100">
-                <button
-                  type="button"
-                  disabled
-                  className="w-full py-2.5 px-4 text-sm font-medium text-gray-500 bg-gray-100 rounded-lg cursor-not-allowed touch-manipulation"
-                  title="Funcionalidad próximamente"
-                >
-                  Ver Detalles (próximamente)
-                </button>
+                <DriverDocsPanel
+                  driverId={d.id}
+                  docs={docsMap.get(d.id) ?? []}
+                />
               </div>
             </div>
           ))
@@ -133,13 +138,16 @@ export default async function DriversPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Estado
                 </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Documentos
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {drivers.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={4}
+                    colSpan={5}
                     className="px-6 py-10 text-center text-sm text-gray-500"
                   >
                     No hay conductores registrados.
@@ -159,6 +167,12 @@ export default async function DriversPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <StatusBadge status={d.status} />
+                    </td>
+                    <td className="px-6 py-4">
+                      <DriverDocsPanel
+                        driverId={d.id}
+                        docs={docsMap.get(d.id) ?? []}
+                      />
                     </td>
                   </tr>
                 ))
