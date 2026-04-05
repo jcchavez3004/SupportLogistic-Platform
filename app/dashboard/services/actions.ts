@@ -3,6 +3,11 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import {
+  sendServiceCreatedNotifications,
+  sendServiceDeliveredNotifications,
+  sendNovedadNotifications,
+} from '@/lib/notifications'
 
 const VALID_SERVICE_STATUSES = [
   'solicitado',
@@ -189,6 +194,34 @@ export async function createNewService(formData: FormData) {
     throw new Error('Error al crear el servicio: ' + error.message)
   }
 
+  const { data: newService } = await supabase
+    .from('services')
+    .select(`
+      id, service_number, pickup_address, delivery_address,
+      delivery_contact_name, observations,
+      clients:client_id ( company_name )
+    `)
+    .eq('client_id', client_id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (newService) {
+    const clientsRaw = newService.clients as unknown
+    const clientsData = Array.isArray(clientsRaw) ? clientsRaw[0] : clientsRaw
+    const companyName = (clientsData as Record<string, unknown> | null)?.company_name
+    void sendServiceCreatedNotifications({
+      serviceId: newService.id,
+      serviceNumber: newService.service_number ?? 'S/N',
+      clientName: (typeof companyName === 'string' ? companyName : null) ?? 'Cliente',
+      pickupAddress: newService.pickup_address,
+      deliveryAddress: newService.delivery_address,
+      deliveryContact: newService.delivery_contact_name,
+      observations: newService.observations,
+      clientEmail: null,
+    })
+  }
+
   revalidatePath('/dashboard/services')
 }
 
@@ -258,6 +291,39 @@ export async function updateServiceStatusByAdmin(
       hint: (error as any)?.hint,
     })
     throw new Error('No se pudo actualizar el estado del servicio.')
+  }
+
+  if (newStatus === 'entregado' || newStatus === 'novedad') {
+    const { data: svc } = await supabase
+      .from('services')
+      .select(`
+        id, service_number, pickup_address, delivery_address,
+        delivery_contact_name, novedad_descripcion,
+        clients:client_id ( company_name )
+      `)
+      .eq('id', serviceId)
+      .single()
+
+    if (svc) {
+      const svcClientsRaw = svc.clients as unknown
+      const svcClientsData = Array.isArray(svcClientsRaw) ? svcClientsRaw[0] : svcClientsRaw
+      const svcCompanyName = (svcClientsData as Record<string, unknown> | null)?.company_name
+      const notifData = {
+        serviceId: svc.id,
+        serviceNumber: svc.service_number ?? 'S/N',
+        clientName: (typeof svcCompanyName === 'string' ? svcCompanyName : null) ?? 'Cliente',
+        pickupAddress: svc.pickup_address,
+        deliveryAddress: svc.delivery_address,
+        deliveryContact: svc.delivery_contact_name,
+        clientEmail: null,
+      }
+
+      if (newStatus === 'entregado') {
+        void sendServiceDeliveredNotifications(notifData)
+      } else if (newStatus === 'novedad' && svc.novedad_descripcion) {
+        void sendNovedadNotifications(notifData, svc.novedad_descripcion)
+      }
+    }
   }
 
   revalidatePath('/dashboard/services')

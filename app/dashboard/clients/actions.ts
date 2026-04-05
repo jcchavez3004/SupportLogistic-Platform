@@ -1,9 +1,18 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/utils/supabase/getCurrentProfile'
+
+async function requireSuperAdmin() {
+  const profile = await getCurrentProfile()
+  if (!profile || profile.role !== 'super_admin') {
+    throw new Error('Solo el Super Admin puede realizar esta acción.')
+  }
+  return profile
+}
 
 export async function createNewClient(formData: FormData) {
   const supabase = await createClient()
@@ -332,4 +341,70 @@ export async function deleteClient(
 
   revalidatePath('/dashboard/clients')
   return { success: true }
+}
+
+export async function createClientWithUser(
+  companyName: string,
+  email: string,
+  password: string
+): Promise<{ success: boolean; clientId?: string; error?: string }> {
+  await requireSuperAdmin()
+
+  try {
+    const admin = createAdminClient()
+
+    const { data: authUser, error: authError } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { company_name: companyName },
+    })
+
+    if (authError || !authUser.user) {
+      return { success: false, error: authError?.message ?? 'Error creando usuario' }
+    }
+
+    const userId = authUser.user.id
+
+    const { data: client, error: clientError } = await admin
+      .from('clients')
+      .insert({ company_name: companyName })
+      .select('id')
+      .single()
+
+    if (clientError || !client) {
+      await admin.auth.admin.deleteUser(userId)
+      return { success: false, error: `Error creando cliente: ${clientError?.message}` }
+    }
+
+    const { error: profileError } = await admin
+      .from('profiles')
+      .upsert(
+        { id: userId, role: 'cliente', client_id: client.id },
+        { onConflict: 'id' }
+      )
+
+    if (profileError) {
+      return { success: false, error: `Error creando perfil: ${profileError.message}` }
+    }
+
+    const { data: zoneType } = await admin
+      .from('service_types')
+      .select('id')
+      .eq('requires_zoning', true)
+      .maybeSingle()
+
+    if (zoneType?.id) {
+      await admin.from('client_services').insert({
+        client_id: client.id,
+        service_type_id: zoneType.id,
+        enabled: true,
+      })
+    }
+
+    revalidatePath('/dashboard/clients')
+    return { success: true, clientId: client.id }
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : 'Error desconocido' }
+  }
 }

@@ -2,6 +2,10 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
+import {
+  sendServiceDeliveredNotifications,
+  sendNovedadNotifications,
+} from '@/lib/notifications'
 
 export interface ServiceStats {
   total: number
@@ -243,6 +247,43 @@ export async function updateServiceStatus(
   if (error) {
     console.error('[updateServiceStatus]', error)
     return { success: false, error: error.message }
+  }
+
+  if (newStatus === 'entregado' || newStatus === 'novedad') {
+    const supabaseForQuery = await createClient()
+    const { data: svc } = await supabaseForQuery
+      .from('services')
+      .select(`
+        id, service_number, pickup_address, delivery_address,
+        delivery_contact_name, novedad_descripcion,
+        clients:client_id ( company_name )
+      `)
+      .eq('id', serviceId)
+      .single()
+
+    if (svc) {
+      const clientsRaw = svc.clients as unknown
+      const clientsData = Array.isArray(clientsRaw) ? clientsRaw[0] : clientsRaw
+      const companyName = (clientsData as Record<string, unknown> | null)?.company_name
+      const notifData = {
+        serviceId: svc.id,
+        serviceNumber: svc.service_number ?? 'S/N',
+        clientName: (typeof companyName === 'string' ? companyName : null) ?? 'Cliente',
+        pickupAddress: svc.pickup_address,
+        deliveryAddress: svc.delivery_address,
+        deliveryContact: svc.delivery_contact_name,
+        clientEmail: null,
+      }
+
+      if (newStatus === 'entregado') {
+        void sendServiceDeliveredNotifications(notifData)
+      }
+
+      const novedadDesc = (extraFields?.novedad_descripcion as string) ?? svc.novedad_descripcion
+      if (newStatus === 'novedad' && novedadDesc) {
+        void sendNovedadNotifications(notifData, novedadDesc)
+      }
+    }
   }
 
   revalidatePath('/dashboard')
