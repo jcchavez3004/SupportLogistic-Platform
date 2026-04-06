@@ -270,13 +270,13 @@ export async function updateServiceStatus(
     return { success: false, error: error.message }
   }
 
-  if (newStatus === 'entregado' || newStatus === 'novedad') {
+  if (newStatus === 'entregado') {
     const supabaseForQuery = await createClient()
     const { data: svc } = await supabaseForQuery
       .from('services')
       .select(`
         id, service_number, pickup_address, delivery_address,
-        delivery_contact_name, novedad_descripcion,
+        delivery_contact_name,
         clients:client_id ( company_name )
       `)
       .eq('id', serviceId)
@@ -286,7 +286,7 @@ export async function updateServiceStatus(
       const clientsRaw = svc.clients as unknown
       const clientsData = Array.isArray(clientsRaw) ? clientsRaw[0] : clientsRaw
       const companyName = (clientsData as Record<string, unknown> | null)?.company_name
-      const notifData = {
+      void sendServiceDeliveredNotifications({
         serviceId: svc.id,
         serviceNumber: svc.service_number ?? 'S/N',
         clientName: (typeof companyName === 'string' ? companyName : null) ?? 'Cliente',
@@ -294,16 +294,7 @@ export async function updateServiceStatus(
         deliveryAddress: svc.delivery_address,
         deliveryContact: svc.delivery_contact_name,
         clientEmail: null,
-      }
-
-      if (newStatus === 'entregado') {
-        void sendServiceDeliveredNotifications(notifData)
-      }
-
-      const novedadDesc = (extraFields?.novedad_descripcion as string) ?? svc.novedad_descripcion
-      if (newStatus === 'novedad' && novedadDesc) {
-        void sendNovedadNotifications(notifData, novedadDesc)
-      }
+      })
     }
   }
 
@@ -346,4 +337,59 @@ export async function getDriverServices(driverId: string) {
     ...service,
     clients: Array.isArray(service.clients) ? service.clients[0] : service.clients,
   }))
+}
+
+/**
+ * Reporta una novedad sin cambiar el estado del servicio.
+ * El servicio continúa su flujo normal.
+ */
+export async function reportNovedad(
+  serviceId: string,
+  descripcion: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'No autenticado' }
+
+  const { error } = await supabase
+    .from('services')
+    .update({ novedad_descripcion: descripcion })
+    .eq('id', serviceId)
+    .eq('driver_id', user.id)
+
+  if (error) {
+    console.error('[reportNovedad]', error)
+    return { success: false, error: error.message }
+  }
+
+  const { data: svc } = await supabase
+    .from('services')
+    .select(`
+      id, service_number, pickup_address, delivery_address,
+      delivery_contact_name,
+      clients:client_id ( company_name )
+    `)
+    .eq('id', serviceId)
+    .single()
+
+  if (svc) {
+    const clientsRaw = svc.clients as unknown
+    const clientsData = Array.isArray(clientsRaw) ? clientsRaw[0] : clientsRaw
+    const companyName = (clientsData as Record<string, unknown> | null)?.company_name
+    void sendNovedadNotifications(
+      {
+        serviceId: svc.id,
+        serviceNumber: svc.service_number ?? 'S/N',
+        clientName: (typeof companyName === 'string' ? companyName : null) ?? 'Cliente',
+        pickupAddress: svc.pickup_address,
+        deliveryAddress: svc.delivery_address,
+        deliveryContact: svc.delivery_contact_name,
+        clientEmail: null,
+      },
+      descripcion
+    )
+  }
+
+  revalidatePath('/dashboard')
+  return { success: true }
 }

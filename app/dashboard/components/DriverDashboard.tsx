@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { LocationTracker } from './LocationTracker'
 import { EvidenceCapture, type EvidenceResult } from './EvidenceCapture'
-import { updateServiceStatus } from '../actions'
+import { updateServiceStatus, reportNovedad } from '../actions'
 
 // ─── Tipo Service (columnas del schema real) ──────────────────────────────────
 export interface Service {
@@ -26,6 +26,7 @@ export interface Service {
   zone_label: string | null
   driver_lat: number | null
   driver_lng: number | null
+  novedad_descripcion: string | null
   created_at: string
 }
 
@@ -63,8 +64,16 @@ export function DriverDashboard({ driverId, initialServices }: DriverDashboardPr
   const [notification, setNotification] = useState<string | null>(null)
   const [novedadText, setNovedadText] = useState('')
   const [showNovedad, setShowNovedad] = useState(false)
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null)
 
-  const active = services.find((s) => ACTIVE.has(s.status)) ?? null
+  const inProgress = services.find((s) =>
+    ['en_curso_recogida', 'recogido', 'en_curso_entrega'].includes(s.status)
+  )
+  const active = inProgress
+    ?? (selectedServiceId
+      ? services.find((s) => s.id === selectedServiceId && ACTIVE.has(s.status))
+      : services.find((s) => ACTIVE.has(s.status)))
+    ?? null
   const isTracking = active
     ? ['en_curso_recogida', 'en_curso_entrega'].includes(active.status)
     : false
@@ -123,10 +132,17 @@ export function DriverDashboard({ driverId, initialServices }: DriverDashboardPr
   // ── Novedad ───────────────────────────────────────────────────────────────
   const handleNovedad = useCallback(async () => {
     if (!active || !novedadText.trim()) return
-    await changeStatus(active.id, 'novedad', { novedad_descripcion: novedadText.trim() })
-    setShowNovedad(false)
-    setNovedadText('')
-  }, [active, novedadText, changeStatus])
+    setLoading(true)
+    try {
+      await reportNovedad(active.id, novedadText.trim())
+      setShowNovedad(false)
+      setNovedadText('')
+      setNotification('⚠️ Novedad reportada al equipo de operaciones')
+      setTimeout(() => setNotification(null), 4000)
+    } finally {
+      setLoading(false)
+    }
+  }, [active, novedadText])
 
   // ── Stats ─────────────────────────────────────────────────────────────────
   const stats = {
@@ -197,6 +213,17 @@ export function DriverDashboard({ driverId, initialServices }: DriverDashboardPr
                 </div>
                 <Truck className="h-8 w-8 text-gray-200 flex-shrink-0" />
               </div>
+
+              {/* Indicador de novedad activa */}
+              {active.novedad_descripcion && (
+                <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                  <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold text-red-700">Novedad registrada</p>
+                    <p className="text-xs text-red-600">{active.novedad_descripcion}</p>
+                  </div>
+                </div>
+              )}
 
               {/* Dirección según estado */}
               {['asignado', 'en_curso_recogida'].includes(active.status) && (
@@ -302,7 +329,7 @@ export function DriverDashboard({ driverId, initialServices }: DriverDashboardPr
                       <textarea
                         value={novedadText}
                         onChange={(e) => setNovedadText(e.target.value)}
-                        placeholder="Describe la novedad..."
+                        placeholder="Describe la novedad (pinchazo, tráfico, accidente, etc.)..."
                         rows={3}
                         className="w-full px-4 py-3 border border-red-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-red-300 resize-none bg-white"
                       />
@@ -318,7 +345,7 @@ export function DriverDashboard({ driverId, initialServices }: DriverDashboardPr
                           disabled={!novedadText.trim() || loading}
                           className="flex-1 py-3 bg-red-500 text-white font-bold rounded-xl text-sm disabled:opacity-40"
                         >
-                          Reportar
+                          Reportar y continuar servicio
                         </button>
                       </div>
                     </div>
@@ -345,22 +372,62 @@ export function DriverDashboard({ driverId, initialServices }: DriverDashboardPr
             </div>
           )}
 
-          {/* Próximos servicios asignados */}
+          {/* Servicios asignados — el conductor elige cuál atender */}
           {services.filter((s) => s.status === 'asignado' && s.id !== active?.id).length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider px-1">Próximos</p>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider px-1">
+                Servicios asignados
+              </p>
               {services
                 .filter((s) => s.status === 'asignado' && s.id !== active?.id)
                 .map((svc) => (
-                  <div key={svc.id} className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-3 shadow-sm">
-                    <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                      <Package className="h-5 w-5 text-blue-500" />
+                  <div
+                    key={svc.id}
+                    className={`bg-white rounded-2xl border-2 p-4 shadow-sm transition-all ${
+                      selectedServiceId === svc.id
+                        ? 'border-blue-400 bg-blue-50'
+                        : 'border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <Package className="h-5 w-5 text-blue-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold text-gray-900">
+                            #{svc.service_number ?? '—'}
+                          </p>
+                          {svc.zone_label && (
+                            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                              {svc.zone_label}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 truncate mt-0.5">
+                          📦 {svc.pickup_address}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">
+                          🎯 {svc.delivery_address}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-gray-900">#{svc.service_number ?? '—'}</p>
-                      <p className="text-xs text-gray-400 truncate">{svc.delivery_address}</p>
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-gray-300 flex-shrink-0" />
+                    {!active || active.status === 'asignado' ? (
+                      <button
+                        onClick={() => setSelectedServiceId(svc.id)}
+                        className={`mt-3 w-full py-2.5 text-sm font-semibold rounded-xl transition-all active:scale-[0.98] ${
+                          selectedServiceId === svc.id
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-blue-50 hover:text-blue-700'
+                        }`}
+                      >
+                        {selectedServiceId === svc.id ? '✓ Seleccionado' : 'Atender este servicio'}
+                      </button>
+                    ) : (
+                      <p className="mt-2 text-xs text-center text-gray-400">
+                        Finaliza el servicio en curso primero
+                      </p>
+                    )}
                   </div>
                 ))}
             </div>

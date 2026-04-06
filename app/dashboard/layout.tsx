@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation'
 import { DashboardSidebar } from './components/DashboardSidebar'
 import { DashboardHeader } from './components/DashboardHeader'
 import { getCurrentProfile, UserRole } from '@/utils/supabase/getCurrentProfile'
+import { PWAInstallBanner } from '@/app/components/PWAInstallBanner'
+import { PWARegister } from '@/app/components/PWARegister'
 
 export default async function DashboardLayout({
   children,
@@ -29,6 +31,8 @@ export default async function DashboardLayout({
         <DashboardHeader user={user} />
         <main className="px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       </div>
+      <PWARegister />
+      {role === 'conductor' && <PWAInstallBanner />}
     </div>
   )
 }
