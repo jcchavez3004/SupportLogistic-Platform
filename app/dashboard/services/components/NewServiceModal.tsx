@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { X, Plus, Trash2, MapPin, Truck } from 'lucide-react'
 import { createNewService } from '../actions'
 import type { UserRole } from '@/utils/supabase/getCurrentProfile'
 
@@ -14,17 +15,60 @@ interface NewServiceModalProps {
   clientId: string | null
 }
 
+type DeliveryPoint = {
+  id: string
+  address: string
+  contact_name: string
+  contact_phone: string
+  time_start: string
+  time_end: string
+  description: string
+  reference_id: string
+}
+
+const POINT_COLORS = [
+  'border-blue-300 bg-blue-50',
+  'border-green-300 bg-green-50',
+  'border-purple-300 bg-purple-50',
+  'border-amber-300 bg-amber-50',
+]
+
+const POINT_BADGE_COLORS = [
+  'bg-blue-600',
+  'bg-green-600',
+  'bg-purple-600',
+  'bg-amber-600',
+]
+
+const MAX_POINTS = 4
+
+function emptyPoint(): DeliveryPoint {
+  return {
+    id: crypto.randomUUID(),
+    address: '',
+    contact_name: '',
+    contact_phone: '',
+    time_start: '',
+    time_end: '',
+    description: '',
+    reference_id: '',
+  }
+}
+
 export function NewServiceModal({
   isOpen,
   onClose,
   clients,
   role,
-  clientId,
 }: NewServiceModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const isClient = role === 'cliente'
+
+  const [deliveryPoints, setDeliveryPoints] = useState<DeliveryPoint[]>([emptyPoint()])
 
   useEffect(() => {
     if (isOpen) dialogRef.current?.showModal()
@@ -35,214 +79,344 @@ export function NewServiceModal({
     if (e.target === dialogRef.current) onClose()
   }
 
-  const handleSubmit = async (formData: FormData) => {
+  const addPoint = () => {
+    if (deliveryPoints.length >= MAX_POINTS) return
+    setDeliveryPoints((prev) => [...prev, emptyPoint()])
+  }
+
+  const removePoint = (id: string) => {
+    if (deliveryPoints.length <= 1) return
+    setDeliveryPoints((prev) => prev.filter((p) => p.id !== id))
+  }
+
+  const updatePoint = (id: string, field: keyof DeliveryPoint, value: string) => {
+    setDeliveryPoints((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
+    )
+  }
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setError(null)
+    setPending(true)
+
     try {
-      await createNewService(formData)
+      const form = e.currentTarget
+      const fd = new FormData(form)
+
+      fd.set('delivery_address', deliveryPoints[0].address)
+      fd.set('delivery_contact_name', deliveryPoints[0].contact_name)
+      fd.set('delivery_phone', deliveryPoints[0].contact_phone)
+      fd.set(
+        'delivery_points_json',
+        JSON.stringify(deliveryPoints.map((p, i) => ({ order: i + 1, ...p })))
+      )
+      fd.set('is_multipoint', deliveryPoints.length > 1 ? 'true' : 'false')
+      fd.set('requires_assistant', form.requires_assistant?.checked ? 'true' : 'false')
+
+      await createNewService(fd)
+      setDeliveryPoints([emptyPoint()])
       formRef.current?.reset()
       onClose()
     } catch (err) {
-      console.error('Error creating service:', err)
+      setError(err instanceof Error ? err.message : 'Error al crear el servicio')
+    } finally {
+      setPending(false)
     }
   }
+
+  const inputClass =
+    'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+  const labelClass = 'block text-xs font-medium text-gray-600 mb-1'
 
   return (
     <dialog
       ref={dialogRef}
-      className="rounded-xl shadow-2xl p-0 w-full max-w-2xl backdrop:bg-black/50"
+      className="rounded-2xl shadow-2xl p-0 w-full max-w-2xl backdrop:bg-black/50"
       onClose={onClose}
       onClick={handleBackdropClick}
     >
-      <div className="p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-4">
+      <div
+        className="max-h-[85vh] overflow-y-auto p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 mb-6">
           <div>
             <h2 className="text-xl font-semibold text-gray-900">
-              {isClient ? 'Solicitar Envío' : 'Nuevo Servicio (Envío)'}
+              {isClient ? 'Solicitar Envío' : 'Nuevo Servicio'}
             </h2>
             <p className="mt-1 text-sm text-gray-500">
-              {isClient
-                ? 'Completa los datos de recogida y entrega para tu solicitud.'
-                : 'Completa los datos de recogida y entrega.'}
+              Completa los datos de recogida y entrega.
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            <span className="sr-only">Cerrar</span>
-            <svg
-              className="h-6 w-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            <X className="h-5 w-5 text-gray-400" />
           </button>
         </div>
 
-        <form ref={formRef} action={handleSubmit} className="mt-6 space-y-6">
-          {/* Solo mostrar select de cliente si NO es rol cliente */}
+        <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
+          {/* Cliente (solo admin/operador) */}
           {!isClient && (
             <div>
-              <label
-                htmlFor="client_id"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Cliente *
-              </label>
+              <label className={labelClass}>Cliente *</label>
               <select
-                id="client_id"
                 name="client_id"
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white focus:outline-none focus:ring-slate-500 focus:border-slate-500"
+                className={inputClass + ' bg-white'}
                 defaultValue=""
               >
-                <option value="" disabled>
-                  Selecciona un cliente…
-                </option>
+                <option value="" disabled>Selecciona un cliente…</option>
                 {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.company_name}
-                  </option>
+                  <option key={c.id} value={c.id}>{c.company_name}</option>
                 ))}
               </select>
             </div>
           )}
 
-          {/* Si es cliente, el client_id se inyecta en el backend; no necesita hidden input */}
+          {/* SECCIÓN 1 — Datos generales */}
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+              <Truck className="h-4 w-4 text-gray-500" />
+              Datos del servicio
+            </legend>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div>
+                <label className={labelClass}>Fecha *</label>
+                <input
+                  name="scheduled_date"
+                  type="date"
+                  required
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Hora recolección *</label>
+                <input
+                  name="scheduled_pickup_time"
+                  type="time"
+                  required
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Tipo vehículo</label>
+                <select name="vehicle_type" className={inputClass + ' bg-white'} defaultValue="">
+                  <option value="">Sin especificar</option>
+                  <option value="Moto">Moto</option>
+                  <option value="Camioneta">Camioneta</option>
+                  <option value="NPR">NPR</option>
+                  <option value="Tractomula">Tractomula</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
+              <div className="flex items-end pb-2">
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    name="requires_assistant"
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  Requiere auxiliar
+                </label>
+              </div>
+            </div>
+          </fieldset>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <h3 className="text-sm font-semibold text-slate-900">
-                Recogida
-              </h3>
+          {/* SECCIÓN 2 — Origen */}
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-green-600" />
+              Origen (recogida)
+            </legend>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2">
+                <label className={labelClass}>Dirección de recogida *</label>
+                <input
+                  name="pickup_address"
+                  required
+                  className={inputClass}
+                  placeholder="Calle, número, ciudad…"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Contacto nombre</label>
+                <input
+                  name="pickup_contact_name"
+                  className={inputClass}
+                  placeholder="Nombre del contacto"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Teléfono</label>
+                <input
+                  name="pickup_phone"
+                  type="tel"
+                  className={inputClass}
+                  placeholder="Ej: 300 000 0000"
+                />
+              </div>
             </div>
-            <div className="md:col-span-2">
-              <label
-                htmlFor="pickup_address"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Dirección de recogida *
-              </label>
-              <input
-                id="pickup_address"
-                name="pickup_address"
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500"
-                placeholder="Calle, número, ciudad…"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="pickup_contact_name"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Contacto (nombre)
-              </label>
-              <input
-                id="pickup_contact_name"
-                name="pickup_contact_name"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500"
-                placeholder="Nombre del contacto"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="pickup_phone"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Teléfono
-              </label>
-              <input
-                id="pickup_phone"
-                name="pickup_phone"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500"
-                placeholder="Ej: +57 300 000 0000"
-              />
+          </fieldset>
+
+          {/* SECCIÓN 3 — Puntos de entrega */}
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-indigo-600" />
+              Puntos de entrega
+              <span className="text-xs font-normal text-gray-400 ml-1">
+                ({deliveryPoints.length}/{MAX_POINTS})
+              </span>
+            </legend>
+
+            <div className="space-y-4">
+              {deliveryPoints.map((point, idx) => (
+                <div
+                  key={point.id}
+                  className={`rounded-xl border-2 p-4 space-y-3 ${POINT_COLORS[idx % POINT_COLORS.length]}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs font-bold ${POINT_BADGE_COLORS[idx % POINT_BADGE_COLORS.length]}`}
+                      >
+                        {idx + 1}
+                      </span>
+                      <span className="text-sm font-semibold text-gray-800">
+                        Punto {idx + 1}
+                      </span>
+                    </div>
+                    {deliveryPoints.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removePoint(point.id)}
+                        className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Eliminar punto"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className={labelClass}>Dirección de entrega *</label>
+                      <input
+                        required
+                        value={point.address}
+                        onChange={(e) => updatePoint(point.id, 'address', e.target.value)}
+                        className={inputClass}
+                        placeholder="Calle, número, ciudad…"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Contacto nombre</label>
+                      <input
+                        value={point.contact_name}
+                        onChange={(e) => updatePoint(point.id, 'contact_name', e.target.value)}
+                        className={inputClass}
+                        placeholder="Nombre"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Teléfono</label>
+                      <input
+                        type="tel"
+                        value={point.contact_phone}
+                        onChange={(e) => updatePoint(point.id, 'contact_phone', e.target.value)}
+                        className={inputClass}
+                        placeholder="300 000 0000"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Hora inicio entrega</label>
+                      <input
+                        type="time"
+                        value={point.time_start}
+                        onChange={(e) => updatePoint(point.id, 'time_start', e.target.value)}
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Hora fin entrega</label>
+                      <input
+                        type="time"
+                        value={point.time_end}
+                        onChange={(e) => updatePoint(point.id, 'time_end', e.target.value)}
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Descripción / elementos</label>
+                      <input
+                        value={point.description}
+                        onChange={(e) => updatePoint(point.id, 'description', e.target.value)}
+                        className={inputClass}
+                        placeholder="Cajas, sobres…"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>ID / Referencia</label>
+                      <input
+                        value={point.reference_id}
+                        onChange={(e) => updatePoint(point.id, 'reference_id', e.target.value)}
+                        className={inputClass}
+                        placeholder="OC-1234"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
 
-            <div className="md:col-span-2 mt-2">
-              <h3 className="text-sm font-semibold text-slate-900">Entrega</h3>
-            </div>
-            <div className="md:col-span-2">
-              <label
-                htmlFor="delivery_address"
-                className="block text-sm font-medium text-gray-700 mb-1"
+            {deliveryPoints.length < MAX_POINTS && (
+              <button
+                type="button"
+                onClick={addPoint}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
               >
-                Dirección de entrega *
-              </label>
-              <input
-                id="delivery_address"
-                name="delivery_address"
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500"
-                placeholder="Calle, número, ciudad…"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="delivery_contact_name"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Contacto (nombre)
-              </label>
-              <input
-                id="delivery_contact_name"
-                name="delivery_contact_name"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500"
-                placeholder="Nombre del contacto"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="delivery_phone"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Teléfono
-              </label>
-              <input
-                id="delivery_phone"
-                name="delivery_phone"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500"
-                placeholder="Ej: +57 300 000 0000"
-              />
-            </div>
-          </div>
+                <Plus className="h-4 w-4" />
+                Agregar punto de entrega
+              </button>
+            )}
+          </fieldset>
 
+          {/* SECCIÓN 4 — Observaciones */}
           <div>
-            <label
-              htmlFor="observations"
-              className="block text-sm font-medium text-gray-700 mb-1"
-            >
-              Observaciones
-            </label>
+            <label className={labelClass}>Observaciones generales</label>
             <textarea
-              id="observations"
               name="observations"
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-slate-500 focus:border-slate-500"
+              className={inputClass}
               placeholder="Notas adicionales para el servicio…"
             />
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-2">
+          {/* Error */}
+          {error && (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+              {error}
+            </p>
+          )}
+
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-sm font-medium text-white bg-slate-900 border border-transparent rounded-md hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
+              disabled={pending}
+              className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
             >
-              {isClient ? 'Solicitar Envío' : 'Crear Servicio'}
+              {pending ? 'Creando...' : isClient ? 'Solicitar Envío' : 'Crear Servicio'}
             </button>
           </div>
         </form>

@@ -173,6 +173,28 @@ export async function createNewService(formData: FormData) {
   const observations =
     (formData.get('observations') as string | null)?.trim() ?? null
 
+  const scheduled_date =
+    (formData.get('scheduled_date') as string | null)?.trim() || null
+  const scheduled_pickup_time =
+    (formData.get('scheduled_pickup_time') as string | null)?.trim() || null
+  const vehicle_type =
+    (formData.get('vehicle_type') as string | null)?.trim() || null
+  const requires_assistant =
+    formData.get('requires_assistant') === 'true'
+  const is_multipoint =
+    formData.get('is_multipoint') === 'true'
+  const delivery_points_json =
+    (formData.get('delivery_points_json') as string | null)?.trim() || null
+
+  let delivery_points = null
+  if (delivery_points_json) {
+    try {
+      delivery_points = JSON.parse(delivery_points_json)
+    } catch {
+      console.warn('[createNewService] Error parseando delivery_points_json')
+    }
+  }
+
   if (!client_id || !pickup_address || !delivery_address) {
     throw new Error('Cliente, dirección de recogida y dirección de entrega son requeridos.')
   }
@@ -186,6 +208,12 @@ export async function createNewService(formData: FormData) {
     delivery_contact_name: delivery_contact_name || null,
     delivery_phone: delivery_phone || null,
     observations: observations || null,
+    scheduled_date: scheduled_date || null,
+    scheduled_pickup_time: scheduled_pickup_time || null,
+    vehicle_type: vehicle_type || null,
+    requires_assistant,
+    is_multipoint,
+    delivery_points,
     status: 'solicitado',
   })
 
@@ -215,7 +243,9 @@ export async function createNewService(formData: FormData) {
       serviceNumber: newService.service_number ?? 'S/N',
       clientName: (typeof companyName === 'string' ? companyName : null) ?? 'Cliente',
       pickupAddress: newService.pickup_address,
-      deliveryAddress: newService.delivery_address,
+      deliveryAddress: is_multipoint
+        ? `${(delivery_points as unknown[])?.length ?? 1} puntos de entrega`
+        : newService.delivery_address,
       deliveryContact: newService.delivery_contact_name,
       observations: newService.observations,
       clientEmail: null,

@@ -433,6 +433,109 @@ export function ServiceDetailView({
         )}
       </form>
 
+      {/* Puntos de entrega múltiples */}
+      {service.is_multipoint && service.delivery_points && service.delivery_points.length > 1 && (
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-100">
+              <MapPin className="h-5 w-5 text-indigo-600" />
+            </div>
+            <h2 className="text-lg font-semibold text-gray-900">
+              Puntos de Entrega ({service.delivery_points.length})
+            </h2>
+          </div>
+          <div className="space-y-4">
+            {service.delivery_points.map((point, i) => (
+              <div key={i} className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold">
+                    {point.order}
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900">
+                    Punto {point.order}
+                  </span>
+                  {(point.time_start || point.time_end) && (
+                    <span className="ml-auto text-xs text-gray-500 bg-white px-2 py-1 rounded-full border border-gray-200">
+                      {point.time_start} — {point.time_end}
+                    </span>
+                  )}
+                </div>
+                <dl className="space-y-1.5">
+                  <div>
+                    <dt className="text-xs text-gray-400">Dirección</dt>
+                    <dd className="text-sm font-medium text-gray-900">{point.address}</dd>
+                  </div>
+                  {point.contact_name && (
+                    <div>
+                      <dt className="text-xs text-gray-400">Contacto</dt>
+                      <dd className="text-sm text-gray-900">
+                        {point.contact_name}
+                        {point.contact_phone && ` · ${point.contact_phone}`}
+                      </dd>
+                    </div>
+                  )}
+                  {point.description && (
+                    <div>
+                      <dt className="text-xs text-gray-400">Elementos</dt>
+                      <dd className="text-sm text-gray-900">{point.description}</dd>
+                    </div>
+                  )}
+                  {point.reference_id && (
+                    <div>
+                      <dt className="text-xs text-gray-400">Referencia</dt>
+                      <dd className="text-sm font-mono text-gray-900">{point.reference_id}</dd>
+                    </div>
+                  )}
+                </dl>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Info adicional del servicio */}
+      {(service.scheduled_date || service.vehicle_type || service.requires_assistant) && (
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
+              <Calendar className="h-5 w-5 text-slate-600" />
+            </div>
+            <h2 className="text-lg font-semibold text-gray-900">Detalles del Servicio</h2>
+          </div>
+          <dl className="space-y-3">
+            {service.scheduled_date && (
+              <div>
+                <dt className="text-sm text-gray-500">Fecha programada</dt>
+                <dd className="text-sm font-medium text-gray-900">
+                  {new Date(service.scheduled_date + 'T12:00:00').toLocaleDateString('es-CO', {
+                    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+                  })}
+                </dd>
+              </div>
+            )}
+            {service.scheduled_pickup_time && (
+              <div>
+                <dt className="text-sm text-gray-500">Hora de recolección</dt>
+                <dd className="text-sm font-medium text-gray-900">{service.scheduled_pickup_time}</dd>
+              </div>
+            )}
+            {service.vehicle_type && (
+              <div>
+                <dt className="text-sm text-gray-500">Tipo de vehículo</dt>
+                <dd className="text-sm font-medium text-gray-900">{service.vehicle_type}</dd>
+              </div>
+            )}
+            {service.requires_assistant && (
+              <div>
+                <dd className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-700 bg-amber-50 px-3 py-1 rounded-full">
+                  👷 Requiere auxiliar
+                </dd>
+              </div>
+            )}
+          </dl>
+        </div>
+      )}
+
       {/* Documentos del conductor */}
       {service.driver_id && driverDocs && driverDocs.length > 0 && (
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">

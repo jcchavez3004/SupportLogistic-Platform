@@ -115,6 +115,21 @@ export interface ServiceDetail {
   picked_up_at: string | null
   completed_at: string | null
   created_at: string
+  delivery_points: Array<{
+    order: number
+    address: string
+    contact_name: string
+    contact_phone: string
+    time_start: string
+    time_end: string
+    description: string
+    reference_id: string
+  }> | null
+  is_multipoint: boolean | null
+  scheduled_date: string | null
+  scheduled_pickup_time: string | null
+  vehicle_type: string | null
+  requires_assistant: boolean | null
   clients: {
     id: string
     company_name: string
@@ -164,6 +179,12 @@ export async function getServiceById(serviceId: string): Promise<ServiceDetail |
       picked_up_at,
       completed_at,
       created_at,
+      delivery_points,
+      is_multipoint,
+      scheduled_date,
+      scheduled_pickup_time,
+      vehicle_type,
+      requires_assistant,
       clients:client_id (
         id,
         company_name,
