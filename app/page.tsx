@@ -7,6 +7,7 @@ import {
   Briefcase,
   Headset,
   ShieldCheck,
+  ClipboardList,
 } from 'lucide-react'
 
 export default function Home() {
@@ -30,9 +31,10 @@ export default function Home() {
 
           <Link
             href="/login"
-            className="inline-flex items-center rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
+            className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
           >
-            Acceso Clientes
+            <ShieldCheck className="h-4 w-4" />
+            Admin
           </Link>
         </nav>
       </header>
@@ -130,23 +132,23 @@ export default function Home() {
                 </div>
               </Link>
 
-              {/* Card 4: Administración */}
+              {/* Card 4: Manejo de Inventarios */}
               <Link
                 href="/login"
                 className="group relative flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg"
               >
-                <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-800 text-white transition-transform duration-300 group-hover:scale-110">
-                  <ShieldCheck className="h-7 w-7" />
+                <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-violet-600 text-white transition-transform duration-300 group-hover:scale-110">
+                  <ClipboardList className="h-7 w-7" />
                 </div>
                 <h3 className="mt-5 text-lg font-semibold text-slate-900">
-                  Administración
+                  Manejo de Inventarios
                 </h3>
                 <p className="mt-2 flex-1 text-sm leading-6 text-slate-600">
-                  Panel de control general y configuración.
+                  Control de stock, entradas, salidas y trazabilidad de productos.
                 </p>
                 <div className="mt-6">
-                  <span className="inline-flex w-full items-center justify-center rounded-full bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white transition-colors group-hover:bg-slate-900">
-                    Acceso Admin
+                  <span className="inline-flex w-full items-center justify-center rounded-full bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors group-hover:bg-violet-700">
+                    Ir a Inventarios
                   </span>
                 </div>
               </Link>
@@ -168,7 +170,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm transition-shadow hover:shadow-md">
               <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-blue-600 text-white">
                 <Radar className="h-7 w-7" />
@@ -205,6 +207,19 @@ export default function Home() {
               <p className="mt-3 text-sm leading-6 text-slate-600">
                 Fotos y confirmación de entregas al instante con almacenamiento
                 seguro y acceso rápido desde la tabla de servicios.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm transition-shadow hover:shadow-md">
+              <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-violet-600 text-white">
+                <ClipboardList className="h-7 w-7" />
+              </div>
+              <h3 className="mt-5 text-lg font-semibold text-slate-900">
+                Manejo de Inventarios
+              </h3>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Control de stock, entradas y salidas con trazabilidad completa
+                de productos almacenados.
               </p>
             </div>
           </div>
