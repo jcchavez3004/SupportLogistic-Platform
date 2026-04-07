@@ -235,3 +235,36 @@ El módulo de conductores es 100% mobile. Siempre:
 3. Solo cambia lo que el prompt pide explícitamente
 4. Verifica TypeScript después de cada cambio
 5. Si hay dudas sobre el schema, pregunta antes de asumir
+
+---
+
+## 📦 Tablas WMS (Warehouse Management System)
+
+### inventory_products
+```
+id, client_id, name, description, category, brand, model,
+sku, barcode, internal_code (generado por SL si no hay barcode),
+stock_current, stock_minimum, unit, location, photo_url,
+is_active, notes, created_at, created_by
+```
+
+### inventory_movements
+```
+id, product_id, client_id,
+type: 'ingreso'|'salida'|'ajuste_positivo'|'ajuste_negativo'|'devolucion',
+quantity, stock_before, stock_after, reference, notes,
+scanned (boolean), service_id, registered_by, created_at
+```
+
+### inventory_alerts
+```
+id, product_id, client_id, type, message, resolved, created_at
+```
+
+### Reglas WMS:
+- Solo super_admin y operador pueden registrar movimientos
+- El cliente solo tiene lectura (RLS enforced)
+- El stock se actualiza automáticamente via trigger de PostgreSQL
+- Los productos sin barcode del fabricante reciben internal_code (SL-XXXXXX)
+- Bucket Storage: inventory-photos (público)
+- Ruta del módulo: /inventory/* (NO /dashboard/inventory)
