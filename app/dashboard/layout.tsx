@@ -26,7 +26,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <DashboardSidebar role={role} />
+      <DashboardSidebar role={role} clientId={profile?.client_id} />
       <div className="md:pl-64">
         <DashboardHeader user={user} />
         <main className="px-4 py-6 sm:px-6 lg:px-8">{children}</main>

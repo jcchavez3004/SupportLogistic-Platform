@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Home, Building2, Truck, Users, FileSpreadsheet, LayoutGrid, LogOut, ShieldCheck, ClipboardList } from 'lucide-react'
+import { Home, Building2, Truck, Users, FileSpreadsheet, LayoutGrid, LogOut, ShieldCheck, ClipboardList, PackageSearch } from 'lucide-react'
 import { clsx } from 'clsx'
 import type { UserRole } from '@/utils/supabase/getCurrentProfile'
 import { createClient } from '@/utils/supabase/client'
@@ -18,19 +18,24 @@ const allNavigation = [
   { name: 'Inventario', href: '/inventory', icon: ClipboardList, roles: ['super_admin', 'operador', 'cliente'] },
 ]
 
+const AUDIFARMA_CLIENT_ID = '1024edc4-7f95-40e0-a9fc-a56bd8b75c77'
+
 interface DashboardSidebarProps {
   role: UserRole
+  clientId?: string | null
 }
 
-export function DashboardSidebar({ role }: DashboardSidebarProps) {
+export function DashboardSidebar({ role, clientId }: DashboardSidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
 
-  // Filtrar navegación según rol
-  const navigation = allNavigation.filter((item) =>
-    item.roles.includes(role)
-  )
+  const showAudifarma = ['super_admin', 'operador'].includes(role) || clientId === AUDIFARMA_CLIENT_ID
+
+  const navigation = [
+    ...allNavigation.filter((item) => item.roles.includes(role)),
+    ...(showAudifarma ? [{ name: 'Audifarma', href: '/dashboard/audifarma', icon: PackageSearch, roles: [] as string[] }] : []),
+  ]
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
