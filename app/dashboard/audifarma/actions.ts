@@ -13,11 +13,14 @@ export type PaqueteRuta = {
   entregado: boolean | null
   hora_entrega: string | null
   bultos: number | null
+  domiciliario: string | null
+  sesion_id: number | string | null
   evidence_photo_1: string | null
   evidence_photo_2: string | null
   evidence_photo_3: string | null
   evidence_photo_4: string | null
   evidence_signature: string | null
+  domiciliario_label: string | null
 }
 
 export async function searchPaquete(
@@ -37,7 +40,7 @@ export async function searchPaquete(
   const { data, error } = await supabase
     .schema('enrutador')
     .from('paquetes_ruta')
-    .select('id, tracking_number, nombre_cliente, direccion, entregado, hora_entrega, bultos, evidence_photo_1, evidence_photo_2, evidence_photo_3, evidence_photo_4, evidence_signature')
+    .select('id, tracking_number, nombre_cliente, direccion, entregado, hora_entrega, bultos, domiciliario, sesion_id, evidence_photo_1, evidence_photo_2, evidence_photo_3, evidence_photo_4, evidence_signature')
     .eq('tracking_number', trackingNumber.trim())
     .order('id', { ascending: false })
     .limit(1)
@@ -50,5 +53,30 @@ export async function searchPaquete(
 
   if (!data) return { data: null, error: 'No se encontró ningún paquete con ese número' }
 
-  return { data: data as PaqueteRuta }
+  const paquete = data as PaqueteRuta
+
+  // Construir etiqueta del domiciliario: "Domiciliario 4" o "Domiciliario 4 — Carlos"
+  let domiciliarioLabel: string | null = null
+  if (paquete.domiciliario) {
+    const numeroStr = paquete.domiciliario.match(/\d+/)?.[0] ?? null
+    domiciliarioLabel = `Domiciliario ${numeroStr ?? paquete.domiciliario}`
+
+    if (numeroStr && paquete.sesion_id != null) {
+      const { data: conductorData } = await supabase
+        .schema('enrutador')
+        .from('domiciliarios_sesion')
+        .select('nombre')
+        .eq('sesion_id', paquete.sesion_id)
+        .eq('numero', parseInt(numeroStr, 10))
+        .maybeSingle()
+
+      if (conductorData?.nombre) {
+        domiciliarioLabel = `Domiciliario ${numeroStr} — ${conductorData.nombre}`
+      }
+    }
+  }
+
+  paquete.domiciliario_label = domiciliarioLabel
+
+  return { data: paquete }
 }

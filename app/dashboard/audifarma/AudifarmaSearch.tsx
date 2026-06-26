@@ -3,9 +3,11 @@
 import { useState, useTransition } from 'react'
 import {
   Search, Package, MapPin, Clock, User,
-  CheckCircle2, AlertCircle, X, Layers, FileSignature,
+  CheckCircle2, AlertCircle, X, Layers, FileSignature, Bike, Download,
 } from 'lucide-react'
 import Image from 'next/image'
+import JSZip from 'jszip'
+import { saveAs } from 'file-saver'
 import { searchPaquete, type PaqueteRuta } from './actions'
 
 interface AudifarmaSearchProps {
@@ -19,6 +21,7 @@ export function AudifarmaSearch({ isStaff }: AudifarmaSearchProps) {
   const [searched, setSearched] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState(false)
 
   const handleSearch = () => {
     if (!query.trim()) return
@@ -41,6 +44,34 @@ export function AudifarmaSearch({ isStaff }: AudifarmaSearchProps) {
     : []
 
   const hasEvidence = photos.length > 0 || result?.evidence_signature
+
+  const descargarEvidencias = async () => {
+    if (!result) return
+    setDownloading(true)
+    try {
+      const zip = new JSZip()
+      const archivos = [
+        { url: result.evidence_photo_1, nombre: 'foto_1.jpg' },
+        { url: result.evidence_photo_2, nombre: 'foto_2.jpg' },
+        { url: result.evidence_photo_3, nombre: 'foto_3.jpg' },
+        { url: result.evidence_photo_4, nombre: 'foto_4.jpg' },
+        { url: result.evidence_signature, nombre: 'firma.png' },
+      ].filter((a) => a.url) as { url: string; nombre: string }[]
+
+      for (const { url, nombre } of archivos) {
+        const res = await fetch(url)
+        const blob = await res.blob()
+        zip.file(nombre, blob)
+      }
+
+      const content = await zip.generateAsync({ type: 'blob' })
+      saveAs(content, `evidencias_${result.tracking_number ?? 'paquete'}.zip`)
+    } catch (err) {
+      console.error('[descargarEvidencias]', err)
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <>
@@ -156,6 +187,17 @@ export function AudifarmaSearch({ isStaff }: AudifarmaSearchProps) {
                 </div>
               </div>
             )}
+            {result.domiciliario_label && (
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Bike className="h-5 w-5 text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 font-medium">Domiciliario</p>
+                  <p className="text-sm font-semibold text-gray-900">{result.domiciliario_label}</p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Evidence */}
@@ -163,6 +205,18 @@ export function AudifarmaSearch({ isStaff }: AudifarmaSearchProps) {
             <div className="border-t border-gray-100 px-6 py-5">
               {hasEvidence ? (
                 <div className="space-y-4">
+                  {/* Descargar ZIP */}
+                  <div className="flex justify-end">
+                    <button
+                      onClick={descargarEvidencias}
+                      disabled={downloading}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    >
+                      <Download className="h-4 w-4" />
+                      {downloading ? 'Generando ZIP...' : 'Descargar evidencias'}
+                    </button>
+                  </div>
+
                   {/* Photos */}
                   {photos.length > 0 && (
                     <div>
