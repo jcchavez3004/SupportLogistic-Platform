@@ -10,12 +10,12 @@ import { createClient } from '@/utils/supabase/client'
 const allNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home, roles: ['super_admin', 'operador', 'cliente', 'conductor'] },
   { name: 'Clientes', href: '/dashboard/clients', icon: Building2, roles: ['super_admin', 'operador'] },
-  { name: 'Servicios', href: '/dashboard/services', icon: Truck, roles: ['super_admin', 'operador', 'cliente'] },
+  { name: 'Servicios', href: '/dashboard/services', icon: Truck, roles: ['super_admin', 'operador'] },
   { name: 'Operaciones', href: '/dashboard/operations', icon: LayoutGrid, roles: ['super_admin', 'operador'] },
-  { name: 'Importar Masivo', href: '/dashboard/bulk-import', icon: FileSpreadsheet, roles: ['cliente'] },
+  { name: 'Importar Masivo', href: '/dashboard/bulk-import', icon: FileSpreadsheet, roles: ['super_admin', 'operador'] },
   { name: 'Conductores', href: '/dashboard/drivers', icon: Users, roles: ['super_admin', 'operador'] },
   { name: 'Staff', href: '/dashboard/staff', icon: ShieldCheck, roles: ['super_admin'] },
-  { name: 'Inventario', href: '/inventory', icon: ClipboardList, roles: ['super_admin', 'operador', 'cliente'] },
+  { name: 'Inventario', href: '/inventory', icon: ClipboardList, roles: ['super_admin', 'operador'] },
 ]
 
 const AUDIFARMA_CLIENT_ID = '1024edc4-7f95-40e0-a9fc-a56bd8b75c77'
@@ -30,7 +30,7 @@ export function DashboardSidebar({ role, clientId }: DashboardSidebarProps) {
   const router = useRouter()
   const supabase = createClient()
 
-  const showAudifarma = ['super_admin', 'operador'].includes(role) || clientId === AUDIFARMA_CLIENT_ID
+  const showAudifarma = ['super_admin', 'operador'].includes(role) || role === 'cliente'
 
   const navigation = [
     ...allNavigation.filter((item) => item.roles.includes(role)),
