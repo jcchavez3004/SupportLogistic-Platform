@@ -10,7 +10,7 @@ export type StaffMember = {
   id: string
   email: string | null
   full_name: string | null
-  role: 'super_admin' | 'operador'
+  role: 'super_admin' | 'operador' | 'cliente'
   phone: string | null
 }
 
