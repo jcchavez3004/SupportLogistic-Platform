@@ -25,6 +25,11 @@ const ROLE_CONFIG: Record<StaffRole, { label: string; color: string; bg: string 
     color: 'text-blue-700',
     bg: 'bg-blue-50 ring-blue-200',
   },
+  cliente: {
+    label: 'Cliente',
+    color: 'text-emerald-700',
+    bg: 'bg-emerald-50 ring-emerald-200',
+  },
 }
 
 // ── Componente Editar ─────────────────────────────────────────────────────────
