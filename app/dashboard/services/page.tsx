@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
-import { getClientsForSelect, getDriversForSelect, getServices, getServicesForClient } from './actions'
+import { getClientsForSelect, getServices, getServicesForClient } from './actions'
 import { NewServiceButton } from './components/NewServiceButton'
 import { ServicesTable } from './components/ServicesTable'
 import { getCurrentProfile } from '@/utils/supabase/getCurrentProfile'
@@ -30,14 +30,9 @@ export default async function ServicesPage() {
   const clientsPromise =
     role === 'cliente' ? Promise.resolve([]) : getClientsForSelect()
 
-  // Si es cliente, no necesita la lista de conductores
-  const driversPromise =
-    role === 'cliente' ? Promise.resolve([]) : getDriversForSelect()
-
-  const [services, clients, drivers] = await Promise.all([
+  const [services, clients] = await Promise.all([
     servicesPromise,
     clientsPromise,
-    driversPromise,
   ])
 
   return (
@@ -61,7 +56,7 @@ export default async function ServicesPage() {
 
       {/* Contenedor de tabla/tarjetas */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        <ServicesTable services={services as any} drivers={drivers} role={role} />
+        <ServicesTable services={services as any} role={role} />
       </div>
     </div>
   )

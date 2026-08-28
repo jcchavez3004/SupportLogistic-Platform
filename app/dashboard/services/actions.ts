@@ -60,6 +60,69 @@ export async function getDriversForSelect() {
   return data
 }
 
+export type FieldDriverSearchResult = {
+  id: string
+  full_name: string
+  phone: string | null
+  cedula: string
+  vehicle_plate: string | null
+}
+
+export async function searchFieldDrivers(query: string): Promise<FieldDriverSearchResult[]> {
+  const trimmed = query.trim()
+  if (trimmed.length < 2) return []
+
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('field_drivers')
+    .select('id, full_name, phone, cedula, vehicle_plate')
+    .or(`cedula.ilike.%${trimmed}%,full_name.ilike.%${trimmed}%`)
+    .order('updated_at', { ascending: false })
+    .limit(8)
+
+  if (error) {
+    console.error('Error searching field_drivers:', error)
+    throw new Error('No se pudieron buscar conductores de campo.')
+  }
+
+  return data ?? []
+}
+
+async function upsertFieldDriverByCedula(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  input: {
+    cedula: string
+    full_name: string | null
+    phone: string | null
+    vehicle_plate: string | null
+  }
+): Promise<string> {
+  const { data, error } = await supabase
+    .from('field_drivers')
+    .upsert(
+      {
+        cedula: input.cedula,
+        full_name: input.full_name ?? '',
+        phone: input.phone,
+        vehicle_plate: input.vehicle_plate,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'cedula' }
+    )
+    .select('id')
+    .single()
+
+  if (error || !data) {
+    console.error('Error upserting field_driver:', error)
+    throw new Error(
+      'Error al guardar el conductor de campo: ' + (error?.message ?? 'sin resultado')
+    )
+  }
+
+  return data.id
+}
+
 export async function getServices() {
   const supabase = await createClient()
 
@@ -71,6 +134,7 @@ export async function getServices() {
       service_number,
       client_id,
       driver_id,
+      field_driver_id,
       pickup_address,
       delivery_address,
       status,
@@ -78,6 +142,10 @@ export async function getServices() {
       created_at,
       clients:clients (
         company_name
+      ),
+      field_drivers (
+        full_name,
+        phone
       )
     `
     )
@@ -105,6 +173,7 @@ export async function getServicesForClient(clientId: string) {
       service_number,
       client_id,
       driver_id,
+      field_driver_id,
       pickup_address,
       delivery_address,
       status,
@@ -112,6 +181,10 @@ export async function getServicesForClient(clientId: string) {
       created_at,
       clients:clients (
         company_name
+      ),
+      field_drivers (
+        full_name,
+        phone
       )
     `
     )
@@ -186,6 +259,15 @@ export async function createNewService(formData: FormData) {
   const delivery_points_json =
     (formData.get('delivery_points_json') as string | null)?.trim() || null
 
+  const driver_full_name =
+    (formData.get('driver_full_name') as string | null)?.trim() || null
+  const driver_phone =
+    (formData.get('driver_phone') as string | null)?.trim() || null
+  const driver_cedula =
+    (formData.get('driver_cedula') as string | null)?.trim() || null
+  const driver_plate =
+    (formData.get('driver_plate') as string | null)?.trim() || null
+
   let delivery_points = null
   if (delivery_points_json) {
     try {
@@ -197,6 +279,17 @@ export async function createNewService(formData: FormData) {
 
   if (!client_id || !pickup_address || !delivery_address) {
     throw new Error('Cliente, dirección de recogida y dirección de entrega son requeridos.')
+  }
+
+  let field_driver_id: string | null = null
+
+  if (driver_cedula) {
+    field_driver_id = await upsertFieldDriverByCedula(supabase, {
+      cedula: driver_cedula,
+      full_name: driver_full_name,
+      phone: driver_phone,
+      vehicle_plate: driver_plate,
+    })
   }
 
   const { error } = await supabase.from('services').insert({
@@ -214,7 +307,8 @@ export async function createNewService(formData: FormData) {
     requires_assistant,
     is_multipoint,
     delivery_points,
-    status: 'solicitado',
+    field_driver_id,
+    status: field_driver_id ? 'asignado' : 'solicitado',
   })
 
   if (error) {
@@ -267,20 +361,118 @@ export async function assignDriverToService(formData: FormData) {
   }
 
   const service_id = (formData.get('service_id') as string | null)?.trim() ?? ''
-  const driver_id = (formData.get('driver_id') as string | null)?.trim() ?? ''
+  const driver_full_name =
+    (formData.get('driver_full_name') as string | null)?.trim() || null
+  const driver_phone =
+    (formData.get('driver_phone') as string | null)?.trim() || null
+  const driver_cedula =
+    (formData.get('driver_cedula') as string | null)?.trim() || null
+  const driver_plate =
+    (formData.get('driver_plate') as string | null)?.trim() || null
 
-  if (!service_id || !driver_id) {
-    throw new Error('Servicio y conductor son requeridos.')
+  if (!service_id || !driver_cedula) {
+    throw new Error('Servicio y cédula del conductor son requeridos.')
   }
+
+  if (!driver_full_name) {
+    throw new Error('Nombre del conductor es requerido.')
+  }
+
+  const field_driver_id = await upsertFieldDriverByCedula(supabase, {
+    cedula: driver_cedula,
+    full_name: driver_full_name,
+    phone: driver_phone,
+    vehicle_plate: driver_plate,
+  })
 
   const { error } = await supabase
     .from('services')
-    .update({ driver_id, status: 'asignado' })
+    .update({ field_driver_id, status: 'asignado' })
     .eq('id', service_id)
 
   if (error) {
     console.error('Error assigning driver to service:', error)
     throw new Error('Error al asignar conductor: ' + error.message)
+  }
+
+  revalidatePath('/dashboard/services')
+}
+
+/**
+ * Quita el conductor de campo asignado a un servicio (p. ej. si el conductor
+ * cancela). El servicio vuelve a 'solicitado' para que se le pueda asignar
+ * uno nuevo. No borra el registro de field_drivers, solo el vínculo.
+ */
+export async function unassignDriverFromService(serviceId: string): Promise<void> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  if (!serviceId) {
+    throw new Error('serviceId es requerido.')
+  }
+
+  const { error } = await supabase
+    .from('services')
+    .update({ field_driver_id: null, status: 'solicitado' })
+    .eq('id', serviceId)
+
+  if (error) {
+    console.error('Error unassigning driver from service:', error)
+    throw new Error('No se pudo quitar el conductor: ' + error.message)
+  }
+
+  revalidatePath('/dashboard/services')
+  revalidatePath(`/dashboard/services/${serviceId}`)
+}
+
+/**
+ * Elimina un servicio por completo (p. ej. si el cliente cancela la
+ * solicitud). Se bloquea si tiene movimientos de inventario asociados,
+ * ya que esa relación no tiene borrado en cascada.
+ */
+export async function deleteService(serviceId: string): Promise<void> {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/login')
+  }
+
+  if (!serviceId) {
+    throw new Error('serviceId es requerido.')
+  }
+
+  const { count, error: countError } = await supabase
+    .from('inventory_movements')
+    .select('id', { count: 'exact', head: true })
+    .eq('service_id', serviceId)
+
+  if (countError) {
+    console.error('Error checking inventory movements before delete:', countError)
+    throw new Error('No se pudo verificar si el servicio tiene movimientos de inventario.')
+  }
+
+  if ((count ?? 0) > 0) {
+    throw new Error(
+      'Este servicio tiene movimientos de inventario asociados y no se puede eliminar.'
+    )
+  }
+
+  const { error } = await supabase.from('services').delete().eq('id', serviceId)
+
+  if (error) {
+    console.error('Error deleting service:', error)
+    throw new Error('No se pudo eliminar el servicio: ' + error.message)
   }
 
   revalidatePath('/dashboard/services')

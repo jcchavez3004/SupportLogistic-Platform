@@ -96,6 +96,7 @@ export interface ServiceDetail {
   service_number: number | null
   client_id: string
   driver_id: string | null
+  field_driver_id: string | null
   status: string
   pickup_address: string
   pickup_contact_name: string | null
@@ -143,6 +144,13 @@ export interface ServiceDetail {
     phone: string | null
     vehicle_plate: string | null
   } | null
+  field_drivers: {
+    id: string
+    full_name: string | null
+    phone: string | null
+    cedula: string | null
+    vehicle_plate: string | null
+  } | null
 }
 
 /**
@@ -160,6 +168,7 @@ export async function getServiceById(serviceId: string): Promise<ServiceDetail |
       service_number,
       client_id,
       driver_id,
+      field_driver_id,
       status,
       pickup_address,
       pickup_contact_name,
@@ -196,6 +205,13 @@ export async function getServiceById(serviceId: string): Promise<ServiceDetail |
         id,
         full_name,
         phone,
+        vehicle_plate
+      ),
+      field_drivers (
+        id,
+        full_name,
+        phone,
+        cedula,
         vehicle_plate
       )
     `

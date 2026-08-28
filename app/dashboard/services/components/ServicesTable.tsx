@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { Eye, MapPin, Flag, Calendar, ChevronRight } from 'lucide-react'
 import { ClientDate } from '@/app/components/ClientDate'
@@ -15,18 +15,42 @@ type ServiceRow = {
   pickup_address: string
   delivery_address: string
   status: string
-  driver_id: string | null
+  field_driver_id: string | null
   evidence_photo_url: string | null
   created_at: string
   clients: { company_name: string } | null
+  field_drivers: { full_name: string | null; phone: string | null } | null
 }
-
-type DriverOption = { id: string; full_name: string | null }
 
 interface ServicesTableProps {
   services: ServiceRow[]
-  drivers: DriverOption[]
   role: UserRole
+}
+
+// Dominio público del panel: aquí vive el enlace sin login que abre el
+// conductor de campo para ver el servicio y subir foto + firma de entrega.
+const PUBLIC_APP_URL = 'https://app.supportlogistic.co'
+
+function toWhatsAppNumber(phone: string | null | undefined): string | null {
+  if (!phone) return null
+  const digits = phone.replace(/\D/g, '')
+  if (!digits) return null
+  // Celular colombiano de 10 dígitos sin indicativo → anteponer 57.
+  return digits.length === 10 ? `57${digits}` : digits
+}
+
+function buildDriverWhatsAppUrl(s: ServiceRow): string {
+  const driverName = s.field_drivers?.full_name || 'conductor'
+  const phone = toWhatsAppNumber(s.field_drivers?.phone)
+  const link = `${PUBLIC_APP_URL}/entrega/${s.id}`
+  const serviceNumber = s.service_number ? `#${s.service_number}` : ''
+  const message =
+    `Hola ${driverName}, tienes el servicio ${serviceNumber} asignado.\n` +
+    `Recogida: ${s.pickup_address}\n` +
+    `Entrega: ${s.delivery_address}\n\n` +
+    `Ingresa aquí para ver el detalle y subir la foto + firma de entrega:\n${link}`
+  const text = encodeURIComponent(message)
+  return phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`
 }
 
 const statusLabels: Record<string, string> = {
@@ -49,7 +73,7 @@ const statusColors: Record<string, string> = {
   novedad: 'bg-red-100 text-red-800',
 }
 
-export function ServicesTable({ services, drivers, role }: ServicesTableProps) {
+export function ServicesTable({ services, role }: ServicesTableProps) {
   const [assigningServiceId, setAssigningServiceId] = useState<string | null>(
     null
   )
@@ -57,12 +81,6 @@ export function ServicesTable({ services, drivers, role }: ServicesTableProps) {
   const isClient = role === 'cliente'
   const canAssign = !isClient
   const canChangeStatus = !isClient
-
-  const driverById = useMemo(() => {
-    const map = new Map<string, DriverOption>()
-    drivers.forEach((d) => map.set(d.id, d))
-    return map
-  }, [drivers])
 
   if (!services || services.length === 0) {
     return (
@@ -78,7 +96,6 @@ export function ServicesTable({ services, drivers, role }: ServicesTableProps) {
         <AssignDriverModal
           isOpen={assigningServiceId !== null}
           onClose={() => setAssigningServiceId(null)}
-          drivers={drivers}
           serviceId={assigningServiceId}
         />
       )}
@@ -146,6 +163,24 @@ export function ServicesTable({ services, drivers, role }: ServicesTableProps) {
                     </p>
                   </div>
                 </div>
+
+                {/* Conductor + enlace WhatsApp */}
+                {!isClient && s.field_driver_id && (
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <p className="text-xs text-gray-500">
+                      <span className="font-medium text-gray-700">Conductor:</span>{' '}
+                      {s.field_drivers?.full_name || '—'}
+                    </p>
+                    <a
+                      href={buildDriverWhatsAppUrl(s)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 active:bg-emerald-100 touch-manipulation"
+                    >
+                      Enviar WhatsApp
+                    </a>
+                  </div>
+                )}
               </div>
 
               {/* Pie: Fecha + Botón */}
@@ -223,11 +258,19 @@ export function ServicesTable({ services, drivers, role }: ServicesTableProps) {
                   </td>
                   {!isClient && (
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                      {s.driver_id ? (
-                        (() => {
-                          const d = driverById.get(s.driver_id)
-                          return d?.full_name || '—'
-                        })()
+                      {s.field_driver_id ? (
+                        <div className="flex items-center gap-2">
+                          <span>{s.field_drivers?.full_name || '—'}</span>
+                          <a
+                            href={buildDriverWhatsAppUrl(s)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Enviar enlace de entrega por WhatsApp"
+                            className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                          >
+                            WhatsApp
+                          </a>
+                        </div>
                       ) : s.status === 'solicitado' && canAssign ? (
                         <button
                           type="button"

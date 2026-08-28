@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { X, Plus, Trash2, MapPin, Truck } from 'lucide-react'
-import { createNewService } from '../actions'
+import { X, Plus, Trash2, MapPin, Truck, User } from 'lucide-react'
+import { createNewService, searchFieldDrivers } from '../actions'
+import type { FieldDriverSearchResult } from '../actions'
 import type { UserRole } from '@/utils/supabase/getCurrentProfile'
 
 type ClientOption = { id: string; company_name: string }
@@ -55,6 +56,22 @@ function emptyPoint(): DeliveryPoint {
   }
 }
 
+type FieldDriverForm = {
+  driver_full_name: string
+  driver_cedula: string
+  driver_phone: string
+  driver_plate: string
+}
+
+function emptyDriver(): FieldDriverForm {
+  return {
+    driver_full_name: '',
+    driver_cedula: '',
+    driver_phone: '',
+    driver_plate: '',
+  }
+}
+
 export function NewServiceModal({
   isOpen,
   onClose,
@@ -69,11 +86,21 @@ export function NewServiceModal({
   const isClient = role === 'cliente'
 
   const [deliveryPoints, setDeliveryPoints] = useState<DeliveryPoint[]>([emptyPoint()])
+  const [driver, setDriver] = useState<FieldDriverForm>(emptyDriver)
+  const [driverSuggestions, setDriverSuggestions] = useState<FieldDriverSearchResult[]>([])
+  const [suggestField, setSuggestField] = useState<'cedula' | 'name' | null>(null)
+  const driverSearchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (isOpen) dialogRef.current?.showModal()
     else dialogRef.current?.close()
   }, [isOpen])
+
+  useEffect(() => {
+    return () => {
+      if (driverSearchTimeout.current) clearTimeout(driverSearchTimeout.current)
+    }
+  }, [])
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDialogElement>) => {
     if (e.target === dialogRef.current) onClose()
@@ -95,6 +122,36 @@ export function NewServiceModal({
     )
   }
 
+  const scheduleDriverSearch = (value: string, field: 'cedula' | 'name') => {
+    if (driverSearchTimeout.current) clearTimeout(driverSearchTimeout.current)
+    if (value.trim().length < 2) {
+      setDriverSuggestions([])
+      setSuggestField(null)
+      return
+    }
+    driverSearchTimeout.current = setTimeout(async () => {
+      try {
+        const results = await searchFieldDrivers(value)
+        setDriverSuggestions(results)
+        setSuggestField(field)
+      } catch {
+        setDriverSuggestions([])
+        setSuggestField(null)
+      }
+    }, 300)
+  }
+
+  const selectFieldDriver = (match: FieldDriverSearchResult) => {
+    setDriver({
+      driver_full_name: match.full_name ?? '',
+      driver_cedula: match.cedula ?? '',
+      driver_phone: match.phone ?? '',
+      driver_plate: match.vehicle_plate ?? '',
+    })
+    setDriverSuggestions([])
+    setSuggestField(null)
+  }
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
@@ -103,6 +160,13 @@ export function NewServiceModal({
     try {
       const form = e.currentTarget
       const fd = new FormData(form)
+
+      const assigningDriver = Object.values(driver).some((v) => v.trim() !== '')
+      if (assigningDriver && (!driver.driver_full_name.trim() || !driver.driver_cedula.trim())) {
+        setError('Nombre y cédula del conductor son requeridos para asignarlo.')
+        setPending(false)
+        return
+      }
 
       fd.set('delivery_address', deliveryPoints[0].address)
       fd.set('delivery_contact_name', deliveryPoints[0].contact_name)
@@ -113,9 +177,16 @@ export function NewServiceModal({
       )
       fd.set('is_multipoint', deliveryPoints.length > 1 ? 'true' : 'false')
       fd.set('requires_assistant', form.requires_assistant?.checked ? 'true' : 'false')
+      fd.set('driver_full_name', driver.driver_full_name.trim())
+      fd.set('driver_cedula', driver.driver_cedula.trim())
+      fd.set('driver_phone', driver.driver_phone.trim())
+      fd.set('driver_plate', driver.driver_plate.trim())
 
       await createNewService(fd)
       setDeliveryPoints([emptyPoint()])
+      setDriver(emptyDriver())
+      setDriverSuggestions([])
+      setSuggestField(null)
       formRef.current?.reset()
       onClose()
     } catch (err) {
@@ -262,7 +333,124 @@ export function NewServiceModal({
             </div>
           </fieldset>
 
-          {/* SECCIÓN 3 — Puntos de entrega */}
+          {/* SECCIÓN 3 — Conductor (opcional, solo admin/operador) */}
+          {!isClient && (
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+              <User className="h-4 w-4 text-gray-500" />
+              Conductor
+              <span className="text-xs font-normal text-gray-400 ml-1">
+                (opcional)
+              </span>
+            </legend>
+            <p className="text-xs text-gray-500">
+              Si asignas un conductor, nombre y cédula son requeridos. El servicio puede crearse sin conductor.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="relative">
+                <label className={labelClass}>Cédula</label>
+                <input
+                  value={driver.driver_cedula}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setDriver((prev) => ({ ...prev, driver_cedula: value }))
+                    scheduleDriverSearch(value, 'cedula')
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => {
+                      if (suggestField === 'cedula') {
+                        setDriverSuggestions([])
+                        setSuggestField(null)
+                      }
+                    }, 150)
+                  }}
+                  className={inputClass}
+                  placeholder="Buscar por cédula…"
+                  autoComplete="off"
+                />
+                {suggestField === 'cedula' && driverSuggestions.length > 0 && (
+                  <ul className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg">
+                    {driverSuggestions.map((s) => (
+                      <li key={s.id}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => selectFieldDriver(s)}
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50"
+                        >
+                          {s.full_name} — {s.cedula}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="relative">
+                <label className={labelClass}>Nombre</label>
+                <input
+                  value={driver.driver_full_name}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setDriver((prev) => ({ ...prev, driver_full_name: value }))
+                    scheduleDriverSearch(value, 'name')
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => {
+                      if (suggestField === 'name') {
+                        setDriverSuggestions([])
+                        setSuggestField(null)
+                      }
+                    }, 150)
+                  }}
+                  className={inputClass}
+                  placeholder="Nombre completo"
+                  autoComplete="off"
+                />
+                {suggestField === 'name' && driverSuggestions.length > 0 && (
+                  <ul className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg">
+                    {driverSuggestions.map((s) => (
+                      <li key={s.id}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => selectFieldDriver(s)}
+                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-blue-50"
+                        >
+                          {s.full_name} — {s.cedula}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div>
+                <label className={labelClass}>Teléfono</label>
+                <input
+                  type="tel"
+                  value={driver.driver_phone}
+                  onChange={(e) =>
+                    setDriver((prev) => ({ ...prev, driver_phone: e.target.value }))
+                  }
+                  className={inputClass}
+                  placeholder="Ej: 300 000 0000"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Placa</label>
+                <input
+                  value={driver.driver_plate}
+                  onChange={(e) =>
+                    setDriver((prev) => ({ ...prev, driver_plate: e.target.value }))
+                  }
+                  className={inputClass}
+                  placeholder="ABC123"
+                />
+              </div>
+            </div>
+          </fieldset>
+          )}
+
+          {/* SECCIÓN 4 — Puntos de entrega */}
           <fieldset className="space-y-3">
             <legend className="text-sm font-semibold text-gray-900 flex items-center gap-2">
               <MapPin className="h-4 w-4 text-indigo-600" />

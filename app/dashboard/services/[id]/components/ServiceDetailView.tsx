@@ -17,10 +17,18 @@ import {
   X,
   Eye,
   Calendar,
+  Trash2,
+  UserX,
+  UserPlus,
 } from 'lucide-react'
 import type { UserRole } from '@/utils/supabase/getCurrentProfile'
 import type { DriverDoc } from '@/app/dashboard/drivers/actions'
 import { updateService, type ServiceDetail } from '../../../actions'
+import {
+  unassignDriverFromService,
+  deleteService,
+} from '../../actions'
+import { AssignDriverModal, type FieldDriverForm } from '../../components/AssignDriverModal'
 import { PDFDownloadButtons } from './PDFDownloadButtons'
 import { LiveTrackingMap } from './LiveTrackingMap'
 import { DriverDocsViewer } from './DriverDocsViewer'
@@ -67,10 +75,42 @@ export function ServiceDetailView({
   const router = useRouter()
   const [isEditing, setIsEditing] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const [isDriverModalOpen, setIsDriverModalOpen] = useState(false)
+  const [isUnassigning, setIsUnassigning] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [driverError, setDriverError] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const isClient = role === 'cliente'
   const canEdit = !isClient // Clientes no pueden editar
   const canGeneratePDF = role === 'super_admin' || role === 'operador'
+
+  // Conductor a mostrar: prioriza el nuevo directorio field_drivers;
+  // conserva el conductor legado (driver_id/profiles) si aún existiera.
+  const assignedDriver = service.field_drivers
+    ? {
+        full_name: service.field_drivers.full_name,
+        phone: service.field_drivers.phone,
+        cedula: service.field_drivers.cedula,
+        vehicle_plate: service.field_drivers.vehicle_plate,
+      }
+    : service.driver
+      ? {
+          full_name: service.driver.full_name,
+          phone: service.driver.phone,
+          cedula: null,
+          vehicle_plate: service.driver.vehicle_plate,
+        }
+      : null
+
+  const initialDriverForModal: FieldDriverForm | null = service.field_drivers
+    ? {
+        driver_full_name: service.field_drivers.full_name ?? '',
+        driver_cedula: service.field_drivers.cedula ?? '',
+        driver_phone: service.field_drivers.phone ?? '',
+        driver_plate: service.field_drivers.vehicle_plate ?? '',
+      }
+    : null
 
   const handleSave = async (formData: FormData) => {
     startTransition(async () => {
@@ -80,6 +120,41 @@ export function ServiceDetailView({
         router.refresh()
       } catch (error) {
         console.error('Error updating service:', error)
+      }
+    })
+  }
+
+  const handleUnassignDriver = () => {
+    if (!window.confirm('¿Quitar el conductor asignado a este servicio? El servicio volverá a estado "Solicitado".')) {
+      return
+    }
+    setDriverError(null)
+    setIsUnassigning(true)
+    startTransition(async () => {
+      try {
+        await unassignDriverFromService(service.id)
+        router.refresh()
+      } catch (error) {
+        setDriverError(error instanceof Error ? error.message : 'No se pudo quitar el conductor.')
+      } finally {
+        setIsUnassigning(false)
+      }
+    })
+  }
+
+  const handleDeleteService = () => {
+    if (!window.confirm('¿Eliminar este servicio? Esta acción no se puede deshacer.')) {
+      return
+    }
+    setDeleteError(null)
+    setIsDeleting(true)
+    startTransition(async () => {
+      try {
+        await deleteService(service.id)
+        router.push('/dashboard/services')
+      } catch (error) {
+        setDeleteError(error instanceof Error ? error.message : 'No se pudo eliminar el servicio.')
+        setIsDeleting(false)
       }
     })
   }
@@ -134,8 +209,38 @@ export function ServiceDetailView({
               serviceNumber={serviceNumber}
             />
           )}
+
+          {canEdit && (
+            <button
+              type="button"
+              onClick={handleDeleteService}
+              disabled={isDeleting}
+              className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-60"
+            >
+              <Trash2 className="h-4 w-4" />
+              {isDeleting ? 'Eliminando…' : 'Eliminar servicio'}
+            </button>
+          )}
         </div>
       </div>
+
+      {deleteError && (
+        <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+          {deleteError}
+        </p>
+      )}
+
+      {canEdit && (
+        <AssignDriverModal
+          isOpen={isDriverModalOpen}
+          onClose={() => {
+            setIsDriverModalOpen(false)
+            router.refresh()
+          }}
+          serviceId={service.id}
+          initialDriver={initialDriverForModal}
+        />
+      )}
 
       <form action={handleSave}>
         <div className="grid gap-6 lg:grid-cols-2">
@@ -171,35 +276,80 @@ export function ServiceDetailView({
 
           {/* Conductor Asignado */}
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100">
-                <Truck className="h-5 w-5 text-amber-600" />
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100">
+                  <Truck className="h-5 w-5 text-amber-600" />
+                </div>
+                <h2 className="text-lg font-semibold text-gray-900">Conductor</h2>
               </div>
-              <h2 className="text-lg font-semibold text-gray-900">Conductor</h2>
+              {canEdit && assignedDriver && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDriverModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    <Edit className="h-3.5 w-3.5" /> Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleUnassignDriver}
+                    disabled={isUnassigning}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+                  >
+                    <UserX className="h-3.5 w-3.5" /> {isUnassigning ? 'Quitando…' : 'Quitar'}
+                  </button>
+                </div>
+              )}
             </div>
-            {service.driver ? (
+            {driverError && (
+              <p className="mb-3 text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                {driverError}
+              </p>
+            )}
+            {assignedDriver ? (
               <dl className="space-y-3">
                 <div>
                   <dt className="text-sm text-gray-500">Nombre</dt>
                   <dd className="text-sm font-medium text-gray-900">
-                    {service.driver.full_name || '—'}
+                    {assignedDriver.full_name || '—'}
                   </dd>
                 </div>
                 <div>
                   <dt className="text-sm text-gray-500">Teléfono</dt>
                   <dd className="text-sm text-gray-900">
-                    {service.driver.phone || '—'}
+                    {assignedDriver.phone || '—'}
                   </dd>
                 </div>
+                {assignedDriver.cedula && (
+                  <div>
+                    <dt className="text-sm text-gray-500">Cédula</dt>
+                    <dd className="text-sm text-gray-900">
+                      {assignedDriver.cedula}
+                    </dd>
+                  </div>
+                )}
                 <div>
                   <dt className="text-sm text-gray-500">Placa</dt>
                   <dd className="text-sm text-gray-900">
-                    {service.driver.vehicle_plate || '—'}
+                    {assignedDriver.vehicle_plate || '—'}
                   </dd>
                 </div>
               </dl>
             ) : (
-              <p className="text-sm text-gray-500">Sin conductor asignado</p>
+              <div className="space-y-3">
+                <p className="text-sm text-gray-500">Sin conductor asignado</p>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setIsDriverModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    <UserPlus className="h-3.5 w-3.5" /> Asignar conductor
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -595,7 +745,7 @@ export function ServiceDetailView({
             <div className="text-center">
               <Truck className="h-8 w-8 text-gray-300 mx-auto mb-2" />
               <p className="text-sm text-gray-400">
-                {service.driver_id
+                {service.driver_id || service.field_driver_id
                   ? 'El conductor aún no ha iniciado el recorrido'
                   : 'Sin conductor asignado'}
               </p>
