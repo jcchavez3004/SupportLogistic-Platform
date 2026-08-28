@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Eye, MapPin, Flag, Calendar, ChevronRight } from 'lucide-react'
+import { Eye, MapPin, Flag, Calendar, ChevronRight, Copy, Check } from 'lucide-react'
 import { ClientDate } from '@/app/components/ClientDate'
 import { StatusBadge } from './StatusBadge'
 import { AssignDriverModal } from './AssignDriverModal'
@@ -39,17 +39,21 @@ function toWhatsAppNumber(phone: string | null | undefined): string | null {
   return digits.length === 10 ? `57${digits}` : digits
 }
 
-function buildDriverWhatsAppUrl(s: ServiceRow): string {
+function buildDriverMessage(s: ServiceRow): string {
   const driverName = s.field_drivers?.full_name || 'conductor'
-  const phone = toWhatsAppNumber(s.field_drivers?.phone)
   const link = `${PUBLIC_APP_URL}/entrega/${s.id}`
   const serviceNumber = s.service_number ? `#${s.service_number}` : ''
-  const message =
+  return (
     `Hola ${driverName}, tienes el servicio ${serviceNumber} asignado.\n` +
     `Recogida: ${s.pickup_address}\n` +
     `Entrega: ${s.delivery_address}\n\n` +
     `Ingresa aquí para ver el detalle y subir la foto + firma de entrega:\n${link}`
-  const text = encodeURIComponent(message)
+  )
+}
+
+function buildDriverWhatsAppUrl(s: ServiceRow): string {
+  const phone = toWhatsAppNumber(s.field_drivers?.phone)
+  const text = encodeURIComponent(buildDriverMessage(s))
   return phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`
 }
 
@@ -77,10 +81,23 @@ export function ServicesTable({ services, role }: ServicesTableProps) {
   const [assigningServiceId, setAssigningServiceId] = useState<string | null>(
     null
   )
+  const [copiedServiceId, setCopiedServiceId] = useState<string | null>(null)
 
   const isClient = role === 'cliente'
   const canAssign = !isClient
   const canChangeStatus = !isClient
+
+  const handleCopyMessage = async (s: ServiceRow) => {
+    try {
+      await navigator.clipboard.writeText(buildDriverMessage(s))
+      setCopiedServiceId(s.id)
+      setTimeout(() => {
+        setCopiedServiceId((cur) => (cur === s.id ? null : cur))
+      }, 2000)
+    } catch (err) {
+      console.error('Error al copiar mensaje:', err)
+    }
+  }
 
   if (!services || services.length === 0) {
     return (
@@ -166,19 +183,36 @@ export function ServicesTable({ services, role }: ServicesTableProps) {
 
                 {/* Conductor + enlace WhatsApp */}
                 {!isClient && s.field_driver_id && (
-                  <div className="flex items-center justify-between gap-2 pt-1">
+                  <div className="space-y-2 pt-1">
                     <p className="text-xs text-gray-500">
                       <span className="font-medium text-gray-700">Conductor:</span>{' '}
                       {s.field_drivers?.full_name || '—'}
                     </p>
-                    <a
-                      href={buildDriverWhatsAppUrl(s)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 active:bg-emerald-100 touch-manipulation"
-                    >
-                      Enviar WhatsApp
-                    </a>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={buildDriverWhatsAppUrl(s)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 active:bg-emerald-100 touch-manipulation"
+                      >
+                        Enviar WhatsApp
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyMessage(s)}
+                        className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-gray-600 active:bg-gray-100 touch-manipulation"
+                      >
+                        {copiedServiceId === s.id ? (
+                          <>
+                            <Check className="h-3.5 w-3.5" /> Copiado
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5" /> Copiar mensaje
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -270,6 +304,18 @@ export function ServicesTable({ services, role }: ServicesTableProps) {
                           >
                             WhatsApp
                           </a>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyMessage(s)}
+                            title="Copiar mensaje al portapapeles"
+                            className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                          >
+                            {copiedServiceId === s.id ? (
+                              <Check className="h-3.5 w-3.5" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" />
+                            )}
+                          </button>
                         </div>
                       ) : s.status === 'solicitado' && canAssign ? (
                         <button
