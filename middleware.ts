@@ -33,11 +33,12 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Aquí puedes agregar lógica para proteger rutas específicas
-  // Por ejemplo, redirigir a login si no hay usuario autenticado
-  // if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
-  //   return NextResponse.redirect(new URL('/login', request.url))
-  // }
+  if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
+  // Pasa el pathname como header para que el layout pueda proteger rutas por rol
+  supabaseResponse.headers.set('x-pathname', request.nextUrl.pathname)
 
   return supabaseResponse
 }

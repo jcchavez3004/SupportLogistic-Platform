@@ -10,11 +10,11 @@ export type StaffMember = {
   id: string
   email: string | null
   full_name: string | null
-  role: 'super_admin' | 'operador'
+  role: 'super_admin' | 'operador' | 'cliente'
   phone: string | null
 }
 
-export type StaffRole = 'operador' | 'super_admin'
+export type StaffRole = 'operador' | 'super_admin' | 'cliente'
 
 // ─── Guard de permisos ────────────────────────────────────────────────────────
 
@@ -78,12 +78,16 @@ export async function createStaffMember(
   const full_name = (formData.get('full_name') as string | null)?.trim() ?? ''
   const role = (formData.get('role') as string | null)?.trim() as StaffRole
   const phone = (formData.get('phone') as string | null)?.trim() || null
+  const client_id = (formData.get('client_id') as string | null)?.trim() || null
 
   if (!email || !password) {
     return { success: false, error: 'Email y contraseña son obligatorios.' }
   }
-  if (!['operador', 'super_admin'].includes(role)) {
+  if (!['operador', 'super_admin', 'cliente'].includes(role)) {
     return { success: false, error: 'Rol inválido.' }
+  }
+  if (role === 'cliente' && !client_id) {
+    return { success: false, error: 'El client_id es obligatorio para el rol Cliente.' }
   }
   if (password.length < 8) {
     return { success: false, error: 'La contraseña debe tener al menos 8 caracteres.' }
@@ -112,7 +116,7 @@ export async function createStaffMember(
     const { error: profileError } = await admin
       .from('profiles')
       .upsert(
-        { id: userId, role, full_name: full_name || null, phone },
+        { id: userId, role, full_name: full_name || null, phone, client_id: client_id || null },
         { onConflict: 'id' }
       )
 

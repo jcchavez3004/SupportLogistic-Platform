@@ -1,10 +1,13 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { DashboardSidebar } from './components/DashboardSidebar'
 import { DashboardHeader } from './components/DashboardHeader'
 import { getCurrentProfile, UserRole } from '@/utils/supabase/getCurrentProfile'
 import { PWAInstallBanner } from '@/app/components/PWAInstallBanner'
 import { PWARegister } from '@/app/components/PWARegister'
+
+const CLIENTE_ALLOWED_PATHS = ['/dashboard', '/dashboard/audifarma']
 
 export default async function DashboardLayout({
   children,
@@ -23,6 +26,17 @@ export default async function DashboardLayout({
 
   const profile = await getCurrentProfile()
   const role: UserRole = profile?.role || 'cliente'
+
+  if (role === 'cliente') {
+    const headersList = await headers()
+    const pathname = headersList.get('x-pathname') ?? ''
+    const allowed = CLIENTE_ALLOWED_PATHS.some(
+      (p) => pathname === p || pathname.startsWith(p + '/')
+    )
+    if (!allowed) {
+      redirect('/dashboard/audifarma')
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

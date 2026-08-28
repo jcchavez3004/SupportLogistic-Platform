@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
+import { getCurrentProfile } from '@/utils/supabase/getCurrentProfile'
 
 export async function login(formData: FormData) {
   const email = formData.get('email') as string
@@ -20,6 +21,11 @@ export async function login(formData: FormData) {
 
   if (error) {
     redirect(`/login?error=${encodeURIComponent(error.message)}`)
+  }
+
+  const profile = await getCurrentProfile()
+  if (profile?.role === 'cliente') {
+    redirect('/dashboard/audifarma')
   }
 
   redirect('/dashboard')

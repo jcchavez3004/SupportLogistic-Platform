@@ -10,6 +10,7 @@ export function NewStaffModal() {
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [selectedRole, setSelectedRole] = useState<string>('operador')
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -29,6 +30,7 @@ export function NewStaffModal() {
   function handleClose() {
     setOpen(false)
     setError(null)
+    setSelectedRole('operador')
   }
 
   return (
@@ -109,13 +111,30 @@ export function NewStaffModal() {
                   <select
                     name="role"
                     required
-                    defaultValue="operador"
+                    value={selectedRole}
+                    onChange={(e) => setSelectedRole(e.target.value)}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                   >
                     <option value="operador">Operador</option>
                     <option value="super_admin">Super Admin</option>
+                    <option value="cliente">Cliente</option>
                   </select>
                 </div>
+                {selectedRole === 'cliente' && (
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Client ID (UUID) *
+                    </label>
+                    <input
+                      name="client_id"
+                      type="text"
+                      required
+                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                      pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                  </div>
+                )}
               </div>
 
               {error && (
