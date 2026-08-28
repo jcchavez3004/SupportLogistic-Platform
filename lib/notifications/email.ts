@@ -6,7 +6,15 @@
 
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+// Instancia perezosa: si se crea a nivel de módulo, cualquier página que
+// importe este archivo (incluso sin llamar a nada) falla en build si
+// RESEND_API_KEY no está disponible en ese paso. Se crea solo al enviar.
+let resendClient: Resend | null = null
+function getResend(): Resend | null {
+  if (!process.env.RESEND_API_KEY) return null
+  if (!resendClient) resendClient = new Resend(process.env.RESEND_API_KEY)
+  return resendClient
+}
 
 const FROM = process.env.NOTIFICATIONS_FROM_EMAIL ?? 'notificaciones@supportlogistic.co'
 const ADMIN_EMAIL = process.env.NOTIFICATIONS_ADMIN_EMAIL ?? 'soporteit@supportlogistic.co'
@@ -38,6 +46,11 @@ async function sendEmail(params: {
   subject: string
   html: string
 }) {
+  const resend = getResend()
+  if (!resend) {
+    console.error('[Email] RESEND_API_KEY no configurada, se omite el envío.')
+    return
+  }
   try {
     const { error } = await resend.emails.send({
       from: FROM,
