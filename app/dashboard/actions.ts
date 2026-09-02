@@ -125,6 +125,11 @@ export interface ServiceDetail {
     time_end: string
     description: string
     reference_id: string
+    completed?: boolean
+    completed_at?: string | null
+    evidence_photo_url?: string | null
+    evidence_photo_url_2?: string | null
+    evidence_signature_url?: string | null
   }> | null
   is_multipoint: boolean | null
   scheduled_date: string | null

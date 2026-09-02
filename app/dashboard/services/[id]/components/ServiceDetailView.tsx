@@ -596,13 +596,33 @@ export function ServiceDetailView({
           </div>
           <div className="space-y-4">
             {service.delivery_points.map((point, i) => (
-              <div key={i} className="rounded-lg border border-gray-100 bg-gray-50 p-4">
+              <div
+                key={i}
+                className={`rounded-lg border p-4 ${
+                  point.completed
+                    ? 'border-emerald-200 bg-emerald-50'
+                    : 'border-gray-100 bg-gray-50'
+                }`}
+              >
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold">
+                  <span
+                    className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs font-bold ${
+                      point.completed ? 'bg-emerald-600' : 'bg-indigo-600'
+                    }`}
+                  >
                     {point.order}
                   </span>
                   <span className="text-sm font-semibold text-gray-900">
                     Punto {point.order}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                      point.completed
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-gray-200 text-gray-600'
+                    }`}
+                  >
+                    {point.completed ? 'Entregado' : 'Pendiente'}
                   </span>
                   {(point.time_start || point.time_end) && (
                     <span className="ml-auto text-xs text-gray-500 bg-white px-2 py-1 rounded-full border border-gray-200">
@@ -636,7 +656,41 @@ export function ServiceDetailView({
                       <dd className="text-sm font-mono text-gray-900">{point.reference_id}</dd>
                     </div>
                   )}
+                  {point.completed_at && (
+                    <div>
+                      <dt className="text-xs text-gray-400">Entregado el</dt>
+                      <dd className="text-sm text-gray-900">
+                        <ClientDateTime date={point.completed_at} />
+                      </dd>
+                    </div>
+                  )}
                 </dl>
+                {(point.evidence_photo_url || point.evidence_photo_url_2 || point.evidence_signature_url) && (
+                  <div className="mt-3 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      {point.evidence_photo_url && (
+                        <a href={point.evidence_photo_url} target="_blank" rel="noopener noreferrer"
+                          className="block overflow-hidden rounded-lg border border-gray-200">
+                          <img src={point.evidence_photo_url} alt={`Evidencia punto ${point.order}`}
+                            className="h-28 w-full object-cover hover:scale-105 transition-transform" />
+                        </a>
+                      )}
+                      {point.evidence_photo_url_2 && (
+                        <a href={point.evidence_photo_url_2} target="_blank" rel="noopener noreferrer"
+                          className="block overflow-hidden rounded-lg border border-gray-200">
+                          <img src={point.evidence_photo_url_2} alt={`Evidencia punto ${point.order} (2)`}
+                            className="h-28 w-full object-cover hover:scale-105 transition-transform" />
+                        </a>
+                      )}
+                    </div>
+                    {point.evidence_signature_url && (
+                      <div className="border border-gray-200 rounded-lg p-2 bg-white inline-block">
+                        <img src={point.evidence_signature_url} alt={`Firma punto ${point.order}`}
+                          className="h-16 object-contain" />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
